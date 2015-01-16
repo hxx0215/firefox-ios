@@ -20,22 +20,23 @@ private let LabelFontSize: CGFloat = 13.0
 private let BackgroundColor = UIColor(red: 57.0 / 255, green: 57.0 / 255, blue: 57.0 / 255, alpha: 1)
 private let TransitionDuration = 0.25
 
-protocol TabBarViewControllerDelegate {
+protocol TabBarViewControllerDelegate: class {
     func didEnterURL(url: NSURL)
 }
 
-class TabBarViewController: UIViewController, UITextFieldDelegate {
+class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewControllerDelegate {
     var profile: Profile!
     var notificationToken: NSObjectProtocol!
     var panels: [ToolbarItem]!
-    var delegate: TabBarViewControllerDelegate?
     var url: NSURL?
+    weak var delegate: TabBarViewControllerDelegate?
 
     private var buttonContainerView: ToolbarContainerView!
     private var controllerContainerView: UIView!
     private var toolbarTextField: UITextField!
     private var cancelButton: UIButton!
     private var buttons: [ToolbarButton] = []
+    private var searchController: SearchViewController?
     
     override func viewWillDisappear(animated: Bool) {
         NSNotificationCenter.defaultCenter().removeObserver(notificationToken)
@@ -78,6 +79,32 @@ class TabBarViewController: UIViewController, UITextFieldDelegate {
         }
 
         addChildViewController(vc)
+    }
+
+    private func showSearchController() {
+        if searchController != nil {
+            return
+        }
+
+        searchController = SearchViewController()
+        searchController!.searchEngines = profile.searchEngines.list
+        searchController!.delegate = self
+
+        view.addSubview(searchController!.view)
+        searchController!.view.snp_makeConstraints { make in
+            make.top.equalTo(self.toolbarTextField.snp_bottom).offset(10)
+            make.left.right.bottom.equalTo(self.view)
+        }
+
+        addChildViewController(searchController!)
+    }
+
+    private func hideSearchController() {
+        if let searchController = searchController {
+            searchController.view.removeFromSuperview()
+            searchController.removeFromParentViewController()
+            self.searchController = nil
+        }
     }
     
     func tappedButton(sender: UIButton!) {
@@ -143,7 +170,6 @@ class TabBarViewController: UIViewController, UITextFieldDelegate {
         toolbarTextField.clearButtonMode = UITextFieldViewMode.WhileEditing
         toolbarTextField.layer.backgroundColor = UIColor.whiteColor().CGColor
         toolbarTextField.layer.cornerRadius = 8
-        toolbarTextField.setContentHuggingPriority(0, forAxis: UILayoutConstraintAxis.Horizontal)
         toolbarTextField.delegate = self
         toolbarTextField.text = url?.absoluteString
         toolbarTextField.font = UIFont(name: "HelveticaNeue-Light", size: 14)
@@ -157,15 +183,18 @@ class TabBarViewController: UIViewController, UITextFieldDelegate {
         cancelButton.addTarget(self, action: "SELdidClickCancel", forControlEvents: UIControlEvents.TouchUpInside)
         view.addSubview(cancelButton)
 
+        // Since the cancel button is next to toolbarTextField, and toolbarTextField can expand to the full width,
+        // give the cancel button a higher compression resistance priority to prevent it from being hidden.g
+        cancelButton.setContentCompressionResistancePriority(1000, forAxis: UILayoutConstraintAxis.Horizontal)
+
         toolbarTextField.snp_makeConstraints { make in
             // 28.5 matches the position of the URL bar in BrowserViewController. If we want this to be
             // less fragile, we could pass the offset as a parameter to this view controller.
             make.top.equalTo(self.view).offset(28.5)
             make.left.equalTo(self.view).offset(8)
-            return
         }
 
-        self.cancelButton.snp_remakeConstraints { make in
+        cancelButton.snp_makeConstraints { make in
             make.left.equalTo(self.toolbarTextField.snp_right).offset(8)
             make.centerY.equalTo(self.toolbarTextField)
             make.right.equalTo(self.view).offset(-8)
@@ -188,10 +217,23 @@ class TabBarViewController: UIViewController, UITextFieldDelegate {
     }
 
     override func viewWillAppear(animated: Bool) {
-        notificationToken = NSNotificationCenter.defaultCenter().addObserverForName(PanelsNotificationName, object: nil, queue: nil) { notif in
+        notificationToken = NSNotificationCenter.defaultCenter().addObserverForName(PanelsNotificationName, object: nil, queue: nil) { [unowned self] notif in
             self.panels = Panels(profile: self.profile).enabledItems
             self.updateButtons()
         }
+    }
+
+    func textField(textField: UITextField, shouldChangeCharactersInRange range: NSRange, replacementString string: String) -> Bool {
+        let text = textField.text as NSString
+        let searchText = text.stringByReplacingCharactersInRange(range, withString: string)
+        if searchText.isEmpty {
+            hideSearchController()
+        } else {
+            showSearchController()
+            searchController!.updateSearchQuery(searchText)
+        }
+
+        return true
     }
 
     func textFieldDidBeginEditing(textField: UITextField) {
@@ -216,6 +258,16 @@ class TabBarViewController: UIViewController, UITextFieldDelegate {
         delegate?.didEnterURL(url!)
         dismissViewControllerAnimated(true, completion: nil)
         return false
+    }
+
+    func textFieldShouldClear(textField: UITextField) -> Bool {
+        hideSearchController()
+        return true
+    }
+
+    func didClickSearchResult(url: NSURL) {
+        delegate?.didEnterURL(url)
+        dismissViewControllerAnimated(true, completion: nil)
     }
 
     func SELdidClickCancel() {

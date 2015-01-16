@@ -6,20 +6,32 @@ import Foundation
 import UIKit
 import WebKit
 
-private let StatusBarHeight = 20
+private let StatusBarHeight: CGFloat = 20 // TODO: Can't assume this is correct. Status bar height is dynamic.
+private let ToolbarHeight: CGFloat = 44
 
 class BrowserViewController: UIViewController {
     private var toolbar: BrowserToolbar!
     private let tabManager = TabManager()
 
     override func viewDidLoad() {
+        let headerView = UIVisualEffectView(effect: UIBlurEffect(style: UIBlurEffectStyle.ExtraLight))
+        view.addSubview(headerView);
+        
+        headerView.snp_makeConstraints { make in
+            make.top.equalTo(self.view.snp_top)
+            make.height.equalTo(ToolbarHeight + StatusBarHeight)
+            make.leading.trailing.equalTo(self.view)
+        }
+        
         toolbar = BrowserToolbar()
-        view.addSubview(toolbar)
+        toolbar.backgroundColor = UIColor.clearColor()
+        headerView.addSubview(toolbar)
 
         toolbar.snp_makeConstraints { make in
-            make.top.equalTo(self.view).offset(StatusBarHeight)
-            make.height.equalTo(44)
-            make.leading.trailing.equalTo(self.view)
+            make.top.equalTo(headerView.snp_top)
+            make.left.equalTo(headerView.snp_left)
+            make.bottom.equalTo(headerView.snp_bottom)
+            make.right.equalTo(headerView.snp_right)
         }
 
         toolbar.browserToolbarDelegate = self
@@ -85,15 +97,21 @@ extension BrowserViewController: TabManagerDelegate {
         selected?.webView.navigationDelegate = self
         toolbar.updateURL(selected?.url)
         toolbar.updateProgressBar(0.0)
+        if let selected = selected {
+            toolbar.updateBackStatus(selected.canGoBack)
+            toolbar.updateFowardStatus(selected.canGoForward)
+        }
     }
 
     func didAddTab(tab: Browser) {
         toolbar.updateTabCount(tabManager.count)
 
         tab.webView.hidden = true
-        view.addSubview(tab.webView)
+        view.insertSubview(tab.webView, atIndex: 0)
+        tab.webView.scrollView.contentInset = UIEdgeInsetsMake(ToolbarHeight + StatusBarHeight, 0, 0, 0)
+        tab.webView.scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(ToolbarHeight + StatusBarHeight, 0, 0, 0)
         tab.webView.snp_makeConstraints { make in
-            make.top.equalTo(self.toolbar.snp_bottom)
+            make.top.equalTo(self.view.snp_top)
             make.leading.trailing.bottom.equalTo(self.view)
         }
         tab.webView.addObserver(self, forKeyPath: "estimatedProgress", options: .New, context: nil)
@@ -111,7 +129,10 @@ extension BrowserViewController: TabManagerDelegate {
 extension BrowserViewController: WKNavigationDelegate {
     func webView(webView: WKWebView, didCommitNavigation navigation: WKNavigation!) {
         toolbar.updateURL(webView.URL);
+        toolbar.updateBackStatus(webView.canGoBack)
+        toolbar.updateFowardStatus(webView.canGoForward)
     }
+
 
     override func observeValueForKeyPath(keyPath: String, ofObject object:
         AnyObject, change:[NSObject: AnyObject], context:

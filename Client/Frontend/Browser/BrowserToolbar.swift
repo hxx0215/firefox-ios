@@ -45,6 +45,7 @@ class BrowserToolbar: UIView, UITextFieldDelegate {
 
         backButton = UIButton()
         backButton.setTitleColor(UIColor.blackColor(), forState: UIControlState.Normal)
+        backButton.setTitleColor(UIColor.grayColor(), forState: UIControlState.Disabled)
         backButton.setTitle("<", forState: UIControlState.Normal)
         backButton.addTarget(self, action: "SELdidClickBack", forControlEvents: UIControlEvents.TouchUpInside)
         longPressGestureBackButton = UILongPressGestureRecognizer(target: self, action: "SELdidLongPressBack")
@@ -53,6 +54,7 @@ class BrowserToolbar: UIView, UITextFieldDelegate {
 
         forwardButton = UIButton()
         forwardButton.setTitleColor(UIColor.blackColor(), forState: UIControlState.Normal)
+        forwardButton.setTitleColor(UIColor.grayColor(), forState: UIControlState.Disabled)
         forwardButton.setTitle(">", forState: UIControlState.Normal)
         forwardButton.addTarget(self, action: "SELdidClickForward", forControlEvents: UIControlEvents.TouchUpInside)
         longPressGestureForwardButton = UILongPressGestureRecognizer(target: self, action: "SELdidLongPressForward")
@@ -90,24 +92,24 @@ class BrowserToolbar: UIView, UITextFieldDelegate {
 
         self.backButton.snp_remakeConstraints { make in
             make.left.equalTo(self)
-            make.centerY.equalTo(self)
+            make.centerY.equalTo(self).offset(10)
             make.width.height.equalTo(44)
         }
 
         self.forwardButton.snp_remakeConstraints { make in
             make.left.equalTo(self.backButton.snp_right)
-            make.centerY.equalTo(self)
+            make.centerY.equalTo(self).offset(10)
             make.width.height.equalTo(44)
         }
 
         self.toolbarTextButton.snp_remakeConstraints { make in
             make.left.equalTo(self.forwardButton.snp_right)
-            make.centerY.equalTo(self)
+            make.centerY.equalTo(self).offset(10)
         }
 
         self.tabsButton.snp_remakeConstraints { make in
             make.left.equalTo(self.toolbarTextButton.snp_right)
-            make.centerY.equalTo(self)
+            make.centerY.equalTo(self).offset(10)
             make.width.height.equalTo(44)
             make.right.equalTo(self).offset(-8)
         }
@@ -124,6 +126,14 @@ class BrowserToolbar: UIView, UITextFieldDelegate {
 
     func updateTabCount(count: Int) {
         tabsButton.setTitle(count.description, forState: UIControlState.Normal)
+    }
+
+    func updateBackStatus(canGoBack: Bool) {
+        backButton.enabled = canGoBack
+    }
+
+    func updateFowardStatus(canGoForward: Bool) {
+        forwardButton.enabled = canGoForward
     }
 
     func SELdidClickBack() {
@@ -157,7 +167,7 @@ class BrowserToolbar: UIView, UITextFieldDelegate {
                 completion: {_ in self.progressBar.setProgress(0.0, animated: false)})
         } else {
             self.progressBar.alpha = 1.0
-            self.progressBar.setProgress(progress, animated: true)
+            self.progressBar.setProgress(progress, animated: (progress > progressBar.progress))
         }
     }
 }
