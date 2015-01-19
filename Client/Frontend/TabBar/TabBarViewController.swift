@@ -24,7 +24,14 @@ protocol TabBarViewControllerDelegate: class {
     func didEnterURL(url: NSURL)
 }
 
-class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewControllerDelegate {
+// A protocol to support clicking on rows in the view controller
+// This needs to be accessible to objc for UIViewControllers to implement it
+@objc
+protocol UrlViewController: class {
+    var delegate: UrlViewControllerDelegate? { get set }
+}
+
+class TabBarViewController: UIViewController, UITextFieldDelegate, UrlViewControllerDelegate {
     var profile: Profile!
     var notificationToken: NSObjectProtocol!
     var panels: [ToolbarItem]!
@@ -37,6 +44,7 @@ class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewCon
     private var cancelButton: UIButton!
     private var buttons: [ToolbarButton] = []
     private var searchController: SearchViewController?
+    private let uriFixup = URIFixup()
     
     override func viewWillDisappear(animated: Bool) {
         NSNotificationCenter.defaultCenter().removeObserver(notificationToken)
@@ -58,6 +66,9 @@ class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewCon
             hideCurrentViewController()
             var vc = self.panels[newButtonIndex].generator(profile: self.profile)
             self.showViewController(vc)
+            if let v = vc as? UrlViewController {
+                v.delegate = self
+            }
 
             _selectedButtonIndex = newButtonIndex
         }
@@ -87,7 +98,7 @@ class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewCon
         }
 
         searchController = SearchViewController()
-        searchController!.searchEngines = profile.searchEngines.list
+        searchController!.searchEngines = profile.searchEngines
         searchController!.delegate = self
 
         view.addSubview(searchController!.view)
@@ -163,7 +174,7 @@ class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewCon
         view.addSubview(controllerContainerView)
 
         toolbarTextField = ToolbarTextField()
-        toolbarTextField.keyboardType = UIKeyboardType.URL
+        toolbarTextField.keyboardType = UIKeyboardType.WebSearch
         toolbarTextField.autocorrectionType = UITextAutocorrectionType.No
         toolbarTextField.autocapitalizationType = UITextAutocapitalizationType.None
         toolbarTextField.returnKeyType = UIReturnKeyType.Go
@@ -230,7 +241,7 @@ class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewCon
             hideSearchController()
         } else {
             showSearchController()
-            searchController!.updateSearchQuery(searchText)
+            searchController!.searchQuery = searchText
         }
 
         return true
@@ -241,18 +252,18 @@ class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewCon
     }
 
     func textFieldShouldReturn(textField: UITextField) -> Bool {
-        let urlString = toolbarTextField.text
+        let text = toolbarTextField.text
+        var url = uriFixup.getURL(text)
 
-        // If the URL is missing a scheme then parse then we manually prefix it with http:// and try
-        // again. We can probably do some smarter things here but I think this is a
-        // decent start that at least lets people skip typing the protocol.
-        var url = NSURL(string: urlString)
-        if url == nil || url?.scheme == nil {
-            url = NSURL(string: "http://" + urlString)
-            if url == nil {
-                println("Error parsing URL: " + urlString)
-                return false
-            }
+        // If we can't make a valid URL, do a search query.
+        if url == nil {
+            url = profile.searchEngines.defaultEngine.searchURLForQuery(text)
+        }
+
+        // If we still don't have a valid URL, something is broken. Give up.
+        if url == nil {
+            println("Error handling URL entry: " + text)
+            return false
         }
 
         delegate?.didEnterURL(url!)
@@ -265,7 +276,7 @@ class TabBarViewController: UIViewController, UITextFieldDelegate, SearchViewCon
         return true
     }
 
-    func didClickSearchResult(url: NSURL) {
+    func didClickUrl(url: NSURL) {
         delegate?.didEnterURL(url)
         dismissViewControllerAnimated(true, completion: nil)
     }
