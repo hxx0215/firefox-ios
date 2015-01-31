@@ -13,13 +13,14 @@ protocol BrowserHelper {
 }
 
 class Browser: NSObject, WKScriptMessageHandler {
-    let webView = WKWebView(frame: CGRectZero, configuration: WKWebViewConfiguration())
+    let webView: WKWebView
 
-    override init() {
-        super.init()
-
+    init(configuration: WKWebViewConfiguration) {
+        configuration.userContentController = WKUserContentController()
+        webView = WKWebView(frame: CGRectZero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
-        webView.configuration.userContentController = WKUserContentController()
+
+        super.init()
     }
 
     var backList: [WKBackForwardListItem]? {
@@ -56,6 +57,14 @@ class Browser: NSObject, WKScriptMessageHandler {
 
     func loadRequest(request: NSURLRequest) {
         webView.loadRequest(request)
+    }
+
+    func stop() {
+        webView.stopLoading()
+    }
+
+    func reload() {
+        webView.reload()
     }
 
     private var helpers: [String: BrowserHelper] = [String: BrowserHelper]()
