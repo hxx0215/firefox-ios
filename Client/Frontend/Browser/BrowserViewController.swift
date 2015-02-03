@@ -177,10 +177,9 @@ extension BrowserViewController: TabManagerDelegate {
     }
 
     func didCreateTab(tab: Browser) {
-        if let longPressGestureRecognizer = LongPressGestureRecognizer(browser: tab) {
+        if let longPressGestureRecognizer = LongPressGestureRecognizer(webView: tab.webView) {
             tab.webView.addGestureRecognizer(longPressGestureRecognizer)
             longPressGestureRecognizer.longPressGestureDelegate = self
-            tab.addHelper(longPressGestureRecognizer, name: LongPressGestureRecognizer.name())
         }
 
         if let readerMode = ReaderMode(browser: tab) {
@@ -220,6 +219,7 @@ extension BrowserViewController: TabManagerDelegate {
     }
 }
 
+
 extension BrowserViewController: WKNavigationDelegate {
     func webView(webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         // If we are going to navigate to a new page, hide the reader mode button. Unless we
@@ -244,7 +244,6 @@ extension BrowserViewController: WKNavigationDelegate {
         var info = [NSObject: AnyObject]()
         info["url"] = webView.URL
         info["title"] = webView.title
-
         notificationCenter.postNotificationName("LocationChange", object: self, userInfo: info)
 
         UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, nil)
