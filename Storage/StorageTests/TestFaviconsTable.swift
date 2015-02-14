@@ -8,7 +8,7 @@ class TestFavcionsTable : XCTestCase {
         var inserted = -1;
         var icon: Favicon!
         db.withConnection(.ReadWrite) { connection -> NSError? in
-            icon = Favicon(url: url)
+            icon = Favicon(url: url, type: IconType.Icon)
             var err: NSError? = nil
             inserted = favicons.insert(connection, item: icon, err: &err)
             return err
@@ -58,7 +58,7 @@ class TestFavcionsTable : XCTestCase {
     func testFaviconsTable() {
         let files = MockFiles()
         self.db = SwiftData(filename: files.get("test.db", basePath: nil)!)
-        let f = FaviconsTable<Favicon>()
+        let f = FaviconsTable<Favicon>(files: files)
 
         self.db.withConnection(SwiftData.Flags.ReadWriteCreate, cb: { (db) -> NSError? in
             f.create(db, version: 1)
@@ -76,12 +76,12 @@ class TestFavcionsTable : XCTestCase {
         options.filter = "url2"
         self.checkIcons(f, options: options, urls: ["url2"])
 
-        var site = Favicon(url: "url1")
+        var site = Favicon(url: "url1", type: IconType.Icon)
         self.clear(f, icon: icon, s: true)
         self.checkIcons(f, options: nil, urls: ["url2"])
         self.clear(f)
         self.checkIcons(f, options: nil, urls: [String]())
         
-        files.remove("test.db")
+        files.remove("test.db", basePath: nil)
     }
 }

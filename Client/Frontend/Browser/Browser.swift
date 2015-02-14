@@ -6,7 +6,6 @@ import Foundation
 import WebKit
 
 protocol BrowserHelper {
-    init?(browser: Browser)
     class func name() -> String
     func scriptMessageHandlerName() -> String?
     func userContentController(userContentController: WKUserContentController, didReceiveScriptMessage message: WKScriptMessage)
@@ -24,12 +23,23 @@ class Browser: NSObject, WKScriptMessageHandler {
         super.init()
     }
 
+    var loading: Bool {
+        return webView.loading
+    }
+
     var backList: [WKBackForwardListItem]? {
         return webView.backForwardList.backList as? [WKBackForwardListItem]
     }
 
     var forwardList: [WKBackForwardListItem]? {
         return webView.backForwardList.forwardList as? [WKBackForwardListItem]
+    }
+
+    var title: String? {
+        if let title = webView.title {
+        	return title
+        }
+        return webView.URL?.absoluteString
     }
 
     var url: NSURL? {
@@ -98,6 +108,28 @@ class Browser: NSObject, WKScriptMessageHandler {
     func getHelper(#name: String) -> BrowserHelper? {
         return helpers[name]
     }
+
+    func screenshot(size: CGSize? = nil) -> UIImage? {
+        // TODO: We should adjust this if the inset is offscreen
+        let top = -webView.scrollView.contentInset.top
+
+        if let size = size {
+            UIGraphicsBeginImageContextWithOptions(size, false, UIScreen.mainScreen().scale)
+        } else {
+            UIGraphicsBeginImageContextWithOptions(webView.frame.size, false, UIScreen.mainScreen().scale)
+        }
+
+        webView.drawViewHierarchyInRect(CGRect(x: 0,
+            y: top,
+            width: webView.frame.width,
+            height: webView.frame.height),
+            afterScreenUpdates: false)
+
+        var img = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+
+        return img
+    }
 }
 
 extension WKWebView {
@@ -124,5 +156,3 @@ extension WKWebView {
         }
     }
 }
-
-
