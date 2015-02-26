@@ -4,40 +4,7 @@
 
 import UIKit
 import Storage
-import Snappy
-
-protocol LoginViewControllerDelegate {
-    func loginViewControllerDidCancel(loginViewController: LoginViewController) -> Void
-}
-
-/*!
-The LoginViewController is a viewcontroller that we show if the user is not logged in yet.
-It not clear yet what needs to be done so consider this a temporary placeholder for now.
-*/
-
-class LoginViewController: UIViewController {
-    var delegate: LoginViewControllerDelegate?
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        view.backgroundColor = UIColor.whiteColor()
-        
-        let label = UILabel()
-        label.text = NSLocalizedString("TODO Not logged in.", comment: "")
-        view.addSubview(label)
-        label.snp_makeConstraints { (make) -> () in
-            make.center.equalTo(label.superview!)
-            return
-        }
-
-        navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: UIBarButtonSystemItem.Cancel, target: self, action: "cancel")
-    }
-
-    func cancel() {
-        delegate?.loginViewControllerDidCancel(self)
-    }
-}
+import Snap
 
 protocol ClientPickerViewControllerDelegate {
     func clientPickerViewControllerDidCancel(clientPickerViewController: ClientPickerViewController) -> Void
@@ -121,7 +88,7 @@ Depending on whether the user is logged in or not, this viewcontroller will pres
 */
 
 @objc(ActionViewController)
-class ActionViewController: UINavigationController, ClientPickerViewControllerDelegate, LoginViewControllerDelegate
+class ActionViewController: UINavigationController, ClientPickerViewControllerDelegate
 {
     var profile: Profile?
     var sharedItem: ShareItem?
@@ -133,12 +100,8 @@ class ActionViewController: UINavigationController, ClientPickerViewControllerDe
             if error == nil && item != nil {
                 self.sharedItem = item
                 
-                let accountManager = AccountProfileManager(loginCallback: { _ in () }, logoutCallback: { _ in () })
-                self.profile = accountManager.getAccount()
                 if self.profile == nil {
-                    let loginViewController = LoginViewController()
-                    loginViewController.delegate = self
-                    self.pushViewController(loginViewController, animated: false)
+                    // XXX todo.
                 } else {
                     let clientPickerViewController = ClientPickerViewController()
                     clientPickerViewController.clientPickerDelegate = self
@@ -161,10 +124,6 @@ class ActionViewController: UINavigationController, ClientPickerViewControllerDe
     }
     
     func clientPickerViewControllerDidCancel(clientPickerViewController: ClientPickerViewController) {
-        finish()
-    }
-    
-    func loginViewControllerDidCancel(loginViewController: LoginViewController) {
         finish()
     }
 }

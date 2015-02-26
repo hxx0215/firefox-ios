@@ -2,20 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import Foundation
 import UIKit
+import Storage
 
-private let ReuseIdentifier = "cell"
 private let SuggestionsLimitCount = 3
 
-@objc
-protocol SearchViewControllerDelegate: class {
-    func searchViewController(searchViewController: SearchViewController, didSubmitURL url: NSURL)
+private enum SearchListSection: Int {
+    case SearchSuggestions
+    case BookmarksAndHistory
+    case Search
 }
 
-class SearchViewController: UIViewController {
-    weak var delegate: SearchViewControllerDelegate?
-    private var tableView = UITableView()
+class SearchViewController: SiteTableViewController {
     private var sortedEngines = [OpenSearchEngine]()
     private var suggestClient: SearchSuggestClient?
     private var searchSuggestions = [String]()
@@ -42,37 +40,15 @@ class SearchViewController: UIViewController {
 
     var searchQuery: String = "" {
         didSet {
-            querySuggestClient()
-
             // Reload the tableView to show the updated text in each engine.
-            tableView.reloadData()
+            reloadData()
         }
     }
 
-    required init(coder aDecoder: NSCoder) {
-        super.init(coder: aDecoder)
-    }
-
-    override init() {
-        // The empty initializer of UIViewController creates the class twice (?!),
-        // so override it here to avoid calling it.
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    override func viewDidLoad() {
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.registerClass(SearchTableViewCell.self, forCellReuseIdentifier: ReuseIdentifier)
-
-        // Make the row separators span the width of the entire table.
-        tableView.layoutMargins = UIEdgeInsetsZero
-        tableView.separatorInset = UIEdgeInsetsZero
-
-        view.addSubview(tableView)
-        tableView.snp_makeConstraints { make in
-            make.edges.equalTo(self.view)
-            return
-        }
+    override func reloadData() {
+        querySuggestClient()
+        queryHistoryClient()
+        tableView.reloadData()
     }
 
     private func querySuggestClient() {
@@ -112,23 +88,60 @@ class SearchViewController: UIViewController {
             self.tableView.reloadData()
         })
     }
+
+    private func queryHistoryClient() {
+        if searchQuery.isEmpty {
+            data = Cursor(status: .Success, msg: "Empty query")
+            return
+        }
+
+        let options = QueryOptions()
+        options.sort = .LastVisit
+        options.filter = searchQuery
+
+        profile.history.get(options, complete: { (data: Cursor) -> Void in
+            self.data = data
+            if data.status != .Success {
+                println("Err: \(data.statusMessage)")
+            }
+            self.tableView.reloadData()
+        })
+    }
 }
 
 extension SearchViewController: UITableViewDataSource {
-    func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCellWithIdentifier(ReuseIdentifier, forIndexPath: indexPath) as SearchTableViewCell
+    override func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
+        let cell = super.tableView(tableView, cellForRowAtIndexPath: indexPath)
 
-        if indexPath.row < searchSuggestions.count {
-            cell.textLabel?.text = searchSuggestions[indexPath.row]
-            cell.imageView?.image = nil
-            cell.isAccessibilityElement = false
-            cell.accessibilityLabel = nil
-        } else {
-            let searchEngine = sortedEngines[indexPath.row - searchSuggestions.count]
-            cell.textLabel?.text = searchQuery
-            cell.imageView?.image = searchEngine.image
-            cell.isAccessibilityElement = true
-            cell.accessibilityLabel = NSString(format: NSLocalizedString("%@ search for %@", comment: "E.g. \"Google search for Mars\". Please keep the first \"%@\" (which contains the search engine name) as close to the beginning of the translated phrase as possible (it is best to have it as the very first word). This is because the phrase is an accessibility label and VoiceOver users need to hear the search engine name first as that is the key information in the whole phrase (they know the search term because they typed it and from previous rows of the table)."), searchEngine.shortName, searchQuery)
+        if let currentSection = SearchListSection(rawValue: indexPath.section) {
+            switch currentSection {
+            case .SearchSuggestions:
+                cell.textLabel?.text = searchSuggestions[indexPath.row]
+                cell.detailTextLabel?.text = nil
+                cell.imageView?.image = nil
+                cell.isAccessibilityElement = false
+                cell.accessibilityLabel = nil
+            case .BookmarksAndHistory:
+                if let site = data[indexPath.row] as? Site {
+                    cell.textLabel?.text = site.title
+                    cell.detailTextLabel?.text = site.url
+                    if let img = site.icon? {
+                        let imgUrl = NSURL(string: img.url)
+                        cell.imageView?.sd_setImageWithURL(imgUrl, placeholderImage: self.profile.favicons.defaultIcon)
+                    } else {
+                        cell.imageView?.image = self.profile.favicons.defaultIcon
+                    }
+                    cell.isAccessibilityElement = false
+                    cell.accessibilityLabel = nil
+                }
+            case .Search:
+                let searchEngine = sortedEngines[indexPath.row]
+                cell.textLabel?.text = searchQuery
+                cell.detailTextLabel?.text = nil
+                cell.imageView?.image = searchEngine.image
+                cell.isAccessibilityElement = true
+                cell.accessibilityLabel = NSString(format: NSLocalizedString("%@ search for %@", comment: "E.g. \"Google search for Mars\". Please keep the first \"%@\" (which contains the search engine name) as close to the beginning of the translated phrase as possible (it is best to have it as the very first word). This is because the phrase is an accessibility label and VoiceOver users need to hear the search engine name first as that is the key information in the whole phrase (they know the search term because they typed it and from previous rows of the table)."), searchEngine.shortName, searchQuery)
+            }
         }
 
         // Make the row separators span the width of the entire table.
@@ -137,36 +150,54 @@ extension SearchViewController: UITableViewDataSource {
         return cell
     }
 
-    func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return searchSuggestions.count + sortedEngines.count
+    override func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        if let currentSection = SearchListSection(rawValue: section) {
+            switch(currentSection) {
+            case .SearchSuggestions:
+                return searchSuggestions.count
+            case .Search:
+                return sortedEngines.count
+            case .BookmarksAndHistory:
+                return data.count
+            }
+        }
+        return 0
+    }
+
+    override func tableView(tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        return 0
+    }
+
+    override func numberOfSectionsInTableView(tableView: UITableView) -> Int {
+        return 3
     }
 }
 
 extension SearchViewController: UITableViewDelegate {
-    func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
+    override func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
         var url: NSURL?
-        if indexPath.row < searchSuggestions.count {
-            let suggestion = searchSuggestions[indexPath.row]
+        if let currentSection = SearchListSection(rawValue: indexPath.section) {
+            switch currentSection {
+            case .SearchSuggestions:
+                let suggestion = searchSuggestions[indexPath.row]
 
-            url = URIFixup().getURL(suggestion)
-            if url == nil {
-                // Assume that only the default search engine can provide search suggestions.
-                url = searchEngines?.defaultEngine.searchURLForQuery(suggestion)
+                url = URIFixup().getURL(suggestion)
+                if url == nil {
+                    // Assume that only the default search engine can provide search suggestions.
+                    url = searchEngines?.defaultEngine.searchURLForQuery(suggestion)
+                }
+            case .BookmarksAndHistory:
+                if let site = data[indexPath.row] as? Site {
+                    url = NSURL(string: site.url)
+                }
+            case .Search:
+                let engine = sortedEngines[indexPath.row - searchSuggestions.count]
+                url = engine.searchURLForQuery(searchQuery)
             }
-        } else {
-            let engine = sortedEngines[indexPath.row - searchSuggestions.count]
-            url = engine.searchURLForQuery(searchQuery)
         }
 
         if let url = url {
-            delegate?.searchViewController(self, didSubmitURL: url)
+            homePanelDelegate?.homePanel(didSubmitURL: url)
         }
-    }
-}
-
-private class SearchTableViewCell: UITableViewCell {
-    private override func layoutSubviews() {
-        super.layoutSubviews()
-        self.imageView?.bounds = CGRectMake(0, 0, 24, 24)
     }
 }
