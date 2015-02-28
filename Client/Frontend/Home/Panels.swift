@@ -47,11 +47,6 @@ private var Controllers: Protector<[ToolbarItem]> = Protector(name: "Controllers
         controller.profile = profile
         return controller
     }, enabled: true),
-    ToolbarItem(title: "Settings", imageName: "settings",  generator: { (profile: Profile) -> UIViewController in
-        let controller = SettingsPanel(nibName: nil, bundle: nil)
-        controller.profile = profile
-        return controller
-    }, enabled: true),
 ])
 
 private var setup: Bool = false // True if we've already loaded the order/enabled prefs once and the Controllers array has been updated
@@ -87,7 +82,7 @@ class Panels : SequenceType {
             let prefs = profile.prefs
 
             if var enabled = prefs.arrayForKey(PanelsEnabledKey) as? [Bool] {
-                if var order = prefs.stringArrayForKey(PanelsOrderKey) as? [String] {
+                if var order = prefs.stringArrayForKey(PanelsOrderKey) {
                     // Now we loop through the panels and sort them based on the order stored
                     // in PanelsOrderKey. We also disable them based on PanelsEnabledKey.
                     Controllers.withWriteLock { protected -> Void in
