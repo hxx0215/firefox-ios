@@ -5,3 +5,7 @@ github "kif-framework/KIF"
 github "st3fan/SWXMLHash"
 github "rs/SDWebImage"
 github "norio-nomura/Base32"
+github "DaveWoodCom/XCGLogger" ~> 1.8
+github "bignerdranch/Deferred" "master"
+github "rnewman/Result" "master"
+github "rnewman/Box" "master"

@@ -7,10 +7,12 @@ import Foundation
 public protocol ProfilePrefs {
     func setObject(value: AnyObject?, forKey defaultName: String)
     func stringForKey(defaultName: String) -> String?
+    func boolForKey(defaultName: String) -> Bool?
     func stringArrayForKey(defaultName: String) -> [String]?
     func arrayForKey(defaultName: String) -> [AnyObject]?
-    func dictionaryForKey(defaultName: String) -> [NSObject : AnyObject]?
+    func dictionaryForKey(defaultName: String) -> [String : AnyObject]?
     func removeObjectForKey(defaultName: String)
+    func clearAll()
 }
 
 public class MockProfilePrefs : ProfilePrefs {
@@ -22,6 +24,10 @@ public class MockProfilePrefs : ProfilePrefs {
 
     public func stringForKey(defaultName: String) -> String? {
         return things[defaultName] as? String
+    }
+
+    public func boolForKey(defaultName: String) -> Bool? {
+        return things[defaultName] as? Bool
     }
 
     public func stringArrayForKey(defaultName: String) -> [String]? {
@@ -39,12 +45,16 @@ public class MockProfilePrefs : ProfilePrefs {
         return nil
     }
 
-    public func dictionaryForKey(defaultName: String) -> [NSObject : AnyObject]? {
-        return things.objectForKey(defaultName) as? [NSObject: AnyObject]
+    public func dictionaryForKey(defaultName: String) -> [String : AnyObject]? {
+        return things.objectForKey(defaultName) as? [String: AnyObject]
     }
 
     public func removeObjectForKey(defaultName: String) {
         self.things[defaultName] = nil
+    }
+
+    public func clearAll() {
+        self.things.removeAllObjects()
     }
 }
 
@@ -74,6 +84,13 @@ public class NSUserDefaultsProfilePrefs : ProfilePrefs {
         return userDefaults.objectForKey(qualifyKey(defaultName)) as? String
     }
 
+    public func boolForKey(defaultName: String) -> Bool? {
+        // boolForKey just returns false if the key doesn't exist. We need to
+        // distinguish between false and non-existent keys, so use objectForKey
+        // and cast the result instead.
+        return userDefaults.objectForKey(qualifyKey(defaultName)) as? Bool
+    }
+
     public func stringArrayForKey(defaultName: String) -> [String]? {
         return userDefaults.stringArrayForKey(qualifyKey(defaultName)) as [String]?
     }
@@ -82,11 +99,19 @@ public class NSUserDefaultsProfilePrefs : ProfilePrefs {
         return userDefaults.arrayForKey(qualifyKey(defaultName))
     }
 
-    public func dictionaryForKey(defaultName: String) -> [NSObject : AnyObject]? {
-        return userDefaults.dictionaryForKey(qualifyKey(defaultName))
+    public func dictionaryForKey(defaultName: String) -> [String : AnyObject]? {
+        return userDefaults.dictionaryForKey(qualifyKey(defaultName)) as? [String:AnyObject]
     }
 
     public func removeObjectForKey(defaultName: String) {
-        userDefaults.removeObjectForKey(qualifyKey(defaultName));
+        userDefaults.removeObjectForKey(qualifyKey(defaultName))
+    }
+
+    public func clearAll() {
+        // TODO: userDefaults.removePersistentDomainForName() has no effect for app group suites.
+        // iOS Bug? Iterate and remove each manually for now.
+        for key in userDefaults.dictionaryRepresentation().keys {
+            userDefaults.removeObjectForKey(key as NSString)
+        }
     }
 }

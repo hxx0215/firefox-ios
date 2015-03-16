@@ -10,7 +10,6 @@ import Snap
 
 public let StatusBarHeight: CGFloat = 20 // TODO: Can't assume this is correct. Status bar height is dynamic.
 public let ToolbarHeight: CGFloat = 44
-public let DefaultPadding: CGFloat = 10
 private let OKString = NSLocalizedString("OK", comment: "OK button")
 private let CancelString = NSLocalizedString("Cancel", comment: "Cancel button")
 
@@ -254,8 +253,12 @@ extension BrowserViewController: URLBarDelegate {
         if let tab = tabManager.selectedTab {
             if let readerMode = tab.getHelper(name: "ReaderMode") as? ReaderMode {
                 if readerMode.state == .Available {
-                    // TODO: When we persist the style, it can be passed here. This will be part of the UI bug that we already have.
-                    //readerMode.style = getStyleFromProfile()
+                    // Update the style of the reader mode to what was last configured
+                    if let dict = self.profile.prefs.dictionaryForKey(ReaderModeProfileKeyStyle) {
+                        if let style = ReaderModeStyle(dict: dict) {
+                            readerMode.style = style
+                        }
+                    }
                     readerMode.enableReaderMode()
                 } else {
                     readerMode.disableReaderMode()
@@ -598,31 +601,6 @@ extension BrowserViewController: WKNavigationDelegate {
         // forward/backward. Strange, but LayoutChanged fixes that.
         UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, nil)
     }
-    
-    func webView(webView: WKWebView, decidePolicyForNavigationAction navigationAction: WKNavigationAction, decisionHandler: (WKNavigationActionPolicy) -> Void) {
-        let url = navigationAction.request.URL
-        var decision:WKNavigationActionPolicy
-        
-        switch url.scheme! {
-        case "about", "http", "https":
-            decision = WKNavigationActionPolicy.Allow
-        default:
-            decision = WKNavigationActionPolicy.Cancel
-        }
-        
-        if let host = url.host {
-            if (host == "itunes.apple.com") {
-                decision = WKNavigationActionPolicy.Cancel
-            }
-        }
-        
-        if decision == WKNavigationActionPolicy.Cancel {
-            if UIApplication.sharedApplication().canOpenURL(url) {
-                UIApplication.sharedApplication().openURL(url)
-            }
-        }
-        decisionHandler(decision)
-    }
 }
 
 extension BrowserViewController: WKUIDelegate {
@@ -688,18 +666,22 @@ extension BrowserViewController: ReaderModeDelegate, UIPopoverPresentationContro
         if tabManager.selectedTab == browser {
             println("DEBUG: New readerModeState: \(state.rawValue)")
             urlBar.updateReaderModeState(state)
+            if state == .Active {
+                hideToolbars(animated: true)
+            }
         }
     }
 
     func readerMode(readerMode: ReaderMode, didDisplayReaderizedContentForBrowser browser: Browser) {
         browser.showContent(animated: true)
+        hideToolbars(animated: true)
     }
 
     func SELshowReaderModeStyle(recognizer: UITapGestureRecognizer) {
         if let readerMode = tabManager.selectedTab?.getHelper(name: "ReaderMode") as? ReaderMode {
             if readerMode.state == ReaderModeState.Active {
                 let readerModeStyleViewController = ReaderModeStyleViewController()
-                readerModeStyleViewController.delegate = readerMode
+                readerModeStyleViewController.delegate = self
                 readerModeStyleViewController.readerModeStyle = readerMode.style
                 readerModeStyleViewController.modalPresentationStyle = UIModalPresentationStyle.Popover
 
@@ -718,6 +700,22 @@ extension BrowserViewController: ReaderModeDelegate, UIPopoverPresentationContro
     // not as a full-screen modal, which is the default on compact device classes.
     func adaptivePresentationStyleForPresentationController(controller: UIPresentationController) -> UIModalPresentationStyle {
         return UIModalPresentationStyle.None
+    }
+}
+
+extension BrowserViewController: ReaderModeStyleViewControllerDelegate {
+    func readerModeStyleViewController(readerModeStyleViewController: ReaderModeStyleViewController, didConfigureStyle style: ReaderModeStyle) {
+        // Persist the new style to the profile
+        let encodedStyle: [String:AnyObject] = style.encode()
+        profile.prefs.setObject(encodedStyle, forKey: ReaderModeProfileKeyStyle)
+        // Change the reader mode style on all tabs that have reader mode active
+        for tabIndex in 0..<tabManager.count {
+            if let readerMode = tabManager.getTab(tabIndex).getHelper(name: "ReaderMode") as? ReaderMode {
+                if readerMode.state == ReaderModeState.Active {
+                    readerMode.style = style
+                }
+            }
+        }
     }
 }
 

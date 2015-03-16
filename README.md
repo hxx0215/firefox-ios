@@ -18,6 +18,8 @@ https://mozilla.invisionapp.com/share/HA254M642#/screens/63057282?maintainScroll
 Building the code
 -----------------
 
+> __As of March 10, 2015, this project requires Xcode 6.2. Make sure you upgrade, the App Store should offer you 6.2 already.__
+
 1. Install the latest [Xcode developer tools](https://developer.apple.com/xcode/downloads/) from Apple.
 1. Install [Carthage](https://github.com/Carthage/Carthage#installing-carthage).
 1. Clone the repository:
@@ -30,7 +32,7 @@ Building the code
 
   ```
   cd firefox-ios
-  carthage checkout --no-use-binaries
+  sh ./checkout.sh
   ```
 
 1. Open `Client.xcodeproj` in Xcode.
@@ -76,4 +78,5 @@ Most if this is fixable and can be reported upstream.
 
 If you add a new dependency, ping @st3fan and he'll make sure things work correctly on our integration (xcode server) and dogfood builders.
 
+A command exists to make adding dependencies less painful: `./update.sh`.
 .
