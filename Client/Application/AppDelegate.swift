@@ -5,16 +5,7 @@
 import UIKit
 import Alamofire
 import MessageUI
-
-#if MOZ_CHANNEL_AURORA
-/*
- A workaround for an issue with MFMailComposerViewController:
-http://stackoverflow.com/questions/25604552/i-have-real-misunderstanding-with-mfmailcomposeviewcontroller-in-swift-ios8-in
-
- Also, MFMailComposeViewController doesn't work in the iOS 8 simulator.
-*/
-private var mailComposer: MFMailComposeViewController!
-#endif
+import Shared
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -39,7 +30,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         self.window.makeKeyAndVisible()
 
 #if MOZ_CHANNEL_AURORA
-        mailComposer = MFMailComposeViewController()
         checkForAuroraUpdate()
         registerFeedbackNotification()
 #endif
@@ -68,11 +58,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             UIApplicationUserDidTakeScreenshotNotification,
             object: nil,
             queue: NSOperationQueue.mainQueue()) { (notification) -> Void in
-                // Render the entire screen into a snapshot to attach to the email
-                let mainScreen = UIScreen.mainScreen()
-                let snapshot = mainScreen.snapshotViewAfterScreenUpdates(true)
-                UIGraphicsBeginImageContext(mainScreen.bounds.size)
-                snapshot.layer.renderInContext(UIGraphicsGetCurrentContext())
+                UIGraphicsBeginImageContext(self.window.bounds.size)
+                self.window.drawViewHierarchyInRect(self.window.bounds, afterScreenUpdates: true)
                 let image = UIGraphicsGetImageFromCurrentImageContext()
                 UIGraphicsEndImageContext()
                 
@@ -88,10 +75,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     private func setupWebServer() {
         let server = WebServer.sharedInstance
-        // Register our fonts, which we want to expose to web content that we present in the WebView
-        server.registerMainBundleResourcesOfType("ttf", module: "fonts")
-        // TODO: In the future let other modules register specific resources here. Unfortunately you cannot add
-        // more handlers after start() has been called, so we need to organize it all here at app startup time.
+        ReaderModeHandlers.register(server)
         server.start()
     }
 }
@@ -154,29 +138,23 @@ extension AppDelegate: UIAlertViewDelegate {
     
 extension AppDelegate: MFMailComposeViewControllerDelegate {
     func sendFeedbackMailWithImage(image: UIImage) {
-        let appVersion = NSBundle.mainBundle()
-            .objectForInfoDictionaryKey("CFBundleShortVersionString") as String
-        let buildNumber = NSBundle.mainBundle()
-            .objectForInfoDictionaryKey(kCFBundleVersionKey) as String
-        
         if (MFMailComposeViewController.canSendMail()) {
-            mailComposer.mailComposeDelegate = self
-            mailComposer.setSubject("Feedback on iOS client version v\(appVersion) (\(buildNumber))")
-            mailComposer.setToRecipients(["ios-feedback@mozilla.com"])
+            let appVersion = NSBundle.mainBundle().objectForInfoDictionaryKey("CFBundleShortVersionString") as String
+            let buildNumber = NSBundle.mainBundle().objectForInfoDictionaryKey(kCFBundleVersionKey) as String
+
+            let mailComposeViewController = MFMailComposeViewController()
+            mailComposeViewController.mailComposeDelegate = self
+            mailComposeViewController.setSubject("Feedback on iOS client version v\(appVersion) (\(buildNumber))")
+            mailComposeViewController.setToRecipients(["ios-feedback@mozilla.com"])
             
             let imageData = UIImagePNGRepresentation(image)
-            mailComposer.addAttachmentData(imageData, mimeType: "image/png", fileName: "feedback.png")
-            self.window.rootViewController?.presentViewController(mailComposer,
-                animated: true, completion: nil)
+            mailComposeViewController.addAttachmentData(imageData, mimeType: "image/png", fileName: "feedback.png")
+            self.window.rootViewController?.presentViewController(mailComposeViewController, animated: true, completion: nil)
         }
     }
     
-    func mailComposeController(controller: MFMailComposeViewController!,
-        didFinishWithResult result: MFMailComposeResult, error: NSError!) {
-            controller.dismissViewControllerAnimated(true, completion: { () -> Void in
-                mailComposer = nil
-                mailComposer = MFMailComposeViewController()
-            })
+    func mailComposeController(mailComposeViewController: MFMailComposeViewController!, didFinishWithResult result: MFMailComposeResult, error: NSError!) {
+        mailComposeViewController.dismissViewControllerAnimated(true, completion: nil)
     }
 }
 #endif

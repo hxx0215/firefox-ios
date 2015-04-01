@@ -21,7 +21,7 @@
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>3</string>
+	<string>6</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
@@ -36,6 +36,7 @@
 		<string>FiraSans-BoldItalic.ttf</string>
 		<string>FiraSans-Italic.ttf</string>
 		<string>FiraSans-Light.ttf</string>
+		<string>FiraSans-Medium.ttf</string>
 		<string>FiraSans-Regular.ttf</string>
 		<string>FiraSans-SemiBold.ttf</string>
 		<string>FiraSans-UltraLight.ttf</string>

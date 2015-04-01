@@ -7,18 +7,18 @@ import UIKit
 import Snap
 
 protocol BrowserToolbarDelegate: class {
-    func browserToolbarDidPressBack(browserToolbar: BrowserToolbar)
-    func browserToolbarDidPressForward(browserToolbar: BrowserToolbar)
-    func browserToolbarDidLongPressBack(browserToolbar: BrowserToolbar)
-    func browserToolbarDidLongPressForward(browserToolbar: BrowserToolbar)
-    func browserToolbarDidPressBookmark(browserToolbar: BrowserToolbar)
-    func browserToolbarDidLongPressBookmark(browserToolbar: BrowserToolbar)
-    func browserToolbarDidPressShare(browserToolbar: BrowserToolbar)
+    func browserToolbarDidPressBack(browserToolbar: BrowserToolbar, button: UIButton)
+    func browserToolbarDidPressForward(browserToolbar: BrowserToolbar, button: UIButton)
+    func browserToolbarDidLongPressBack(browserToolbar: BrowserToolbar, button: UIButton)
+    func browserToolbarDidLongPressForward(browserToolbar: BrowserToolbar, button: UIButton)
+    func browserToolbarDidPressBookmark(browserToolbar: BrowserToolbar, button: UIButton)
+    func browserToolbarDidLongPressBookmark(browserToolbar: BrowserToolbar, button: UIButton)
+    func browserToolbarDidPressShare(browserToolbar: BrowserToolbar, button: UIButton)
 }
 
-private let ButtonHeight = 24
+private let ButtonInset = UIEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
 
-class BrowserToolbar: UIView {
+class BrowserToolbar: Toolbar {
     weak var browserToolbarDelegate: BrowserToolbarDelegate?
 
     private let shareButton: UIButton
@@ -38,32 +38,42 @@ class BrowserToolbar: UIView {
         super.init()
 
         backButton.setImage(UIImage(named: "back"), forState: .Normal)
-        backButton.accessibilityLabel = NSLocalizedString("Back", comment: "")
+        backButton.setImage(UIImage(named: "backPressed"), forState: .Highlighted)
+        backButton.accessibilityLabel = NSLocalizedString("Back", comment: "Accessibility Label for the browser toolbar Back button")
         backButton.accessibilityHint = NSLocalizedString("Double tap and hold to open history", comment: "")
         longPressGestureBackButton = UILongPressGestureRecognizer(target: self, action: "SELdidLongPressBack:")
         backButton.addGestureRecognizer(longPressGestureBackButton)
+        backButton.contentEdgeInsets = ButtonInset
         backButton.addTarget(self, action: "SELdidClickBack", forControlEvents: UIControlEvents.TouchUpInside)
 
         forwardButton.setImage(UIImage(named: "forward"), forState: .Normal)
-        forwardButton.accessibilityLabel = NSLocalizedString("Forward", comment: "")
+        forwardButton.setImage(UIImage(named: "forwardPressed"), forState: .Highlighted)
+        forwardButton.accessibilityLabel = NSLocalizedString("Forward", comment: "Accessibility Label for the browser toolbar Forward button")
         forwardButton.accessibilityHint = NSLocalizedString("Double tap and hold to open history", comment: "")
         longPressGestureForwardButton = UILongPressGestureRecognizer(target: self, action: "SELdidLongPressForward:")
         forwardButton.addGestureRecognizer(longPressGestureForwardButton)
         forwardButton.addTarget(self, action: "SELdidClickForward", forControlEvents: UIControlEvents.TouchUpInside)
+        forwardButton.contentEdgeInsets = ButtonInset
 
         shareButton.setImage(UIImage(named: "send"), forState: .Normal)
+        shareButton.setImage(UIImage(named: "sendPressed"), forState: .Highlighted)
+        shareButton.accessibilityLabel = NSLocalizedString("Share", comment: "Accessibility Label for the browser toolbar Share button")
         shareButton.addTarget(self, action: "SELdidClickShare", forControlEvents: UIControlEvents.TouchUpInside)
+        shareButton.contentEdgeInsets = ButtonInset
 
         bookmarkButton.setImage(UIImage(named: "bookmark"), forState: .Normal)
+        bookmarkButton.setImage(UIImage(named: "bookmarked"), forState: UIControlState.Selected)
+        bookmarkButton.accessibilityLabel = NSLocalizedString("Bookmark", comment: "Accessibility Label for the browser toolbar Bookmark button")
         longPressGestureBookmarkButton = UILongPressGestureRecognizer(target: self, action: "SELdidLongPressBookmark:")
         bookmarkButton.addGestureRecognizer(longPressGestureBookmarkButton)
         bookmarkButton.addTarget(self, action: "SELdidClickBookmark", forControlEvents: UIControlEvents.TouchUpInside)
+        bookmarkButton.contentEdgeInsets = ButtonInset
 
         addButtons(backButton, forwardButton, shareButton, bookmarkButton)
     }
 
     // This has to be here since init() calls it
-    override private init(frame: CGRect) {
+    private override init(frame: CGRect) {
         // And these have to be initialized in here or the compiler will get angry
         backButton = UIButton()
         forwardButton = UIButton()
@@ -80,35 +90,6 @@ class BrowserToolbar: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func addButtons(buttons: UIButton...) {
-        for button in buttons {
-            button.setTitleColor(UIColor.blackColor(), forState: UIControlState.Normal)
-            button.setTitleColor(UIColor.grayColor(), forState: UIControlState.Disabled)
-            button.imageView?.contentMode = UIViewContentMode.ScaleAspectFit
-            addSubview(button)
-        }
-    }
-
-    override func layoutSubviews() {
-        var prev: UIView? = nil
-        for view in self.subviews {
-            if let view = view as? UIView {
-                view.snp_remakeConstraints { make in
-                    if let prev = prev {
-                        make.left.equalTo(prev.snp_right)
-                    } else {
-                        make.left.equalTo(self)
-                    }
-                    prev = view
-
-                    make.centerY.equalTo(self)
-                    make.height.equalTo(ButtonHeight)
-                    make.width.equalTo(self).dividedBy(self.subviews.count)
-                }
-            }
-        }
-    }
-
     func updateBackStatus(canGoBack: Bool) {
         backButton.enabled = canGoBack
     }
@@ -118,44 +99,40 @@ class BrowserToolbar: UIView {
     }
 
     func updateBookmarkStatus(isBookmarked: Bool) {
-        if isBookmarked {
-            bookmarkButton.imageView?.image = UIImage(named: "bookmarked")
-        } else {
-            bookmarkButton.imageView?.image = UIImage(named: "bookmark")
-        }
+        bookmarkButton.selected = isBookmarked
     }
 
     func SELdidClickBack() {
-        browserToolbarDelegate?.browserToolbarDidPressBack(self)
+        browserToolbarDelegate?.browserToolbarDidPressBack(self, button: backButton)
     }
 
     func SELdidLongPressBack(recognizer: UILongPressGestureRecognizer) {
         if recognizer.state == UIGestureRecognizerState.Began {
-            browserToolbarDelegate?.browserToolbarDidLongPressBack(self)
+            browserToolbarDelegate?.browserToolbarDidLongPressBack(self, button: backButton)
         }
     }
 
     func SELdidClickShare() {
-        browserToolbarDelegate?.browserToolbarDidPressShare(self)
+        browserToolbarDelegate?.browserToolbarDidPressShare(self, button: shareButton)
     }
 
     func SELdidClickForward() {
-        browserToolbarDelegate?.browserToolbarDidPressForward(self)
+        browserToolbarDelegate?.browserToolbarDidPressForward(self, button: forwardButton)
     }
 
     func SELdidLongPressForward(recognizer: UILongPressGestureRecognizer) {
         if recognizer.state == UIGestureRecognizerState.Began {
-            browserToolbarDelegate?.browserToolbarDidLongPressForward(self)
+            browserToolbarDelegate?.browserToolbarDidLongPressForward(self, button: forwardButton)
         }
     }
 
     func SELdidClickBookmark() {
-        browserToolbarDelegate?.browserToolbarDidPressBookmark(self)
+        browserToolbarDelegate?.browserToolbarDidPressBookmark(self, button: bookmarkButton)
     }
 
     func SELdidLongPressBookmark(recognizer: UILongPressGestureRecognizer) {
         if recognizer.state == UIGestureRecognizerState.Began {
-            browserToolbarDelegate?.browserToolbarDidLongPressBookmark(self)
+            browserToolbarDelegate?.browserToolbarDidLongPressBookmark(self, button: bookmarkButton)
         }
     }
 }

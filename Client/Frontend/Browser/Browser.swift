@@ -11,8 +11,15 @@ protocol BrowserHelper {
     func userContentController(userContentController: WKUserContentController, didReceiveScriptMessage message: WKScriptMessage)
 }
 
+protocol BrowserDelegate {
+    func browser(browser: Browser, didAddSnackbar bar: SnackBar)
+    func browser(browser: Browser, didRemoveSnackbar bar: SnackBar)
+}
+
 class Browser: NSObject, WKScriptMessageHandler {
     let webView: WKWebView
+    var browserDelegate: BrowserDelegate? = nil
+    var bars = [SnackBar]()
 
     init(configuration: WKWebViewConfiguration) {
         configuration.userContentController = WKUserContentController()
@@ -37,14 +44,27 @@ class Browser: NSObject, WKScriptMessageHandler {
     }
 
     var title: String? {
+        return webView.title
+    }
+
+    var displayTitle: String {
         if let title = webView.title {
-        	return title
+            if !title.isEmpty {
+                return title
+            }
         }
-        return webView.URL?.absoluteString
+        return displayURL?.absoluteString ?? ""
     }
 
     var url: NSURL? {
         return webView.URL?
+    }
+
+    var displayURL: NSURL? {
+        if let url = webView.URL {
+            return ReaderModeUtils.isReaderModeURL(url) ? ReaderModeUtils.decodeURL(url) : url
+        }
+        return nil
     }
 
     var canGoBack: Bool {
@@ -110,28 +130,6 @@ class Browser: NSObject, WKScriptMessageHandler {
         return helpers[name]
     }
 
-    func screenshot(size: CGSize? = nil) -> UIImage? {
-        // TODO: We should adjust this if the inset is offscreen
-        let top = -webView.scrollView.contentInset.top
-
-        if let size = size {
-            UIGraphicsBeginImageContextWithOptions(size, false, UIScreen.mainScreen().scale)
-        } else {
-            UIGraphicsBeginImageContextWithOptions(webView.frame.size, false, UIScreen.mainScreen().scale)
-        }
-
-        webView.drawViewHierarchyInRect(CGRect(x: 0,
-            y: top,
-            width: webView.frame.width,
-            height: webView.frame.height),
-            afterScreenUpdates: false)
-
-        var img = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
-        return img
-    }
-
     func hideContent(animated: Bool = false) {
         webView.userInteractionEnabled = false
         if animated {
@@ -153,10 +151,39 @@ class Browser: NSObject, WKScriptMessageHandler {
             webView.alpha = 1.0
         }
     }
+
+    func addSnackbar(bar: SnackBar) {
+        bars.append(bar)
+        browserDelegate?.browser(self, didAddSnackbar: bar)
+    }
+
+    func removeSnackbar(bar: SnackBar) {
+        if let index = find(bars, bar) {
+            bars.removeAtIndex(index)
+            browserDelegate?.browser(self, didRemoveSnackbar: bar)
+        }
+    }
+
+    func removeAllSnackbars() {
+        // Enumerate backwards here because we'll remove items from the list as we go.
+        for var i = bars.count-1; i >= 0; i-- {
+            let bar = bars[i]
+            removeSnackbar(bar)
+        }
+    }
+
+    func expireSnackbars() {
+        // Enumerate backwards here because we may remove items from the list as we go.
+        for var i = bars.count-1; i >= 0; i-- {
+            let bar = bars[i]
+            if !bar.shouldPersist(self) {
+                removeSnackbar(bar)
+            }
+        }
+    }
 }
 
 extension WKWebView {
-
     func runScriptFunction(function: String, fromScript: String, callback: (AnyObject?) -> Void) {
         if let path = NSBundle.mainBundle().pathForResource(fromScript, ofType: "js") {
             if let source = NSString(contentsOfFile: path, encoding: NSUTF8StringEncoding, error: nil) {

@@ -10,18 +10,24 @@ private let ThumbnailIdentifier = "Thumbnail"
 private let RowIdentifier = "Row"
 private let SeparatorKind = "separator"
 private let SeparatorIdentifier = "separator"
+
+private let ThumbnailSectionPadding: CGFloat = 8
+private let SeparatorColor = UIColor(rgb: 0xcccccc)
 private let DefaultImage = "defaultFavicon"
 
 class TopSitesPanel: UIViewController, UICollectionViewDelegate, HomePanel {
     weak var homePanelDelegate: HomePanelDelegate?
-    var collection: UICollectionView!
-    var dataSource: TopSitesDataSource!
-    let layout = TopSitesLayout()
+
+    private var collection: TopSitesCollectionView!
+    private var dataSource: TopSitesDataSource!
+    private let layout = TopSitesLayout()
 
     var profile: Profile! {
         didSet {
-            profile.history.get(nil, complete: { (data) -> Void in
+            let options = QueryOptions(filter: nil, filterType: .None, sort: .Frecency)
+            profile.history.get(options, complete: { (data) -> Void in
                 self.dataSource.data = data
+                self.dataSource.profile = self.profile
                 self.collection.reloadData()
             })
         }
@@ -34,16 +40,16 @@ class TopSitesPanel: UIViewController, UICollectionViewDelegate, HomePanel {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        dataSource = TopSitesDataSource(data: Cursor(status: .Failure, msg: "Nothing loaded yet"))
+        dataSource = TopSitesDataSource(profile: profile, data: Cursor(status: .Failure, msg: "Nothing loaded yet"))
 
         layout.registerClass(TopSitesSeparator.self, forDecorationViewOfKind: SeparatorKind)
 
-        collection = UICollectionView(frame: self.view.frame, collectionViewLayout: layout)
+        collection = TopSitesCollectionView(frame: self.view.frame, collectionViewLayout: layout)
         collection.backgroundColor = UIColor.whiteColor()
         collection.delegate = self
         collection.dataSource = dataSource
         collection.registerClass(ThumbnailCell.self, forCellWithReuseIdentifier: ThumbnailIdentifier)
-        collection.registerClass(TopSitesRow.self, forCellWithReuseIdentifier: RowIdentifier)
+        collection.registerClass(TwoLineCollectionViewCell.self, forCellWithReuseIdentifier: RowIdentifier)
         collection.keyboardDismissMode = .OnDrag
         view.addSubview(collection)
         collection.snp_makeConstraints { make in
@@ -59,23 +65,35 @@ class TopSitesPanel: UIViewController, UICollectionViewDelegate, HomePanel {
     }
 }
 
-class TopSitesLayout: UICollectionViewLayout {
-    let ToolbarHeight: CGFloat = 44
-    let StatusBarHeight: CGFloat = 20
-    let RowHeight: CGFloat = 70
-    let AspectRatio: CGFloat = 0.7
+private class TopSitesCollectionView: UICollectionView {
+    private override func touchesBegan(touches: NSSet, withEvent event: UIEvent) {
+        // Hide the keyboard if this view is touched.
+        window?.rootViewController?.view.endEditing(true)
+        super.touchesBegan(touches, withEvent: event)
+    }
+}
 
-    var numRows: CGFloat = 3
-    var numCols: CGFloat = 2
-    var width: CGFloat { return self.collectionView?.frame.width ?? 0 }
-    var thumbnailWidth: CGFloat { return CGFloat(width / numCols) }
-    var thumbnailHeight: CGFloat { return thumbnailWidth * AspectRatio }
+private class TopSitesLayout: UICollectionViewLayout {
+    private let AspectRatio: CGFloat = 1.25 // Ratio of width:height.
 
-    var count: Int {
+    private var thumbnailRows = 3
+    private var thumbnailCols = 2
+    private var thumbnailCount: Int { return thumbnailRows * thumbnailCols }
+    private var width: CGFloat { return self.collectionView?.frame.width ?? 0 }
+    private var thumbnailWidth: CGFloat { return width / CGFloat(thumbnailCols) - (ThumbnailSectionPadding * 2) / CGFloat(thumbnailCols) }
+    private var thumbnailHeight: CGFloat { return thumbnailWidth / AspectRatio }
+
+    private var count: Int {
         if let dataSource = self.collectionView?.dataSource as? TopSitesDataSource {
             return dataSource.data.count
         }
         return 0
+    }
+
+    private var topSectionHeight: CGFloat {
+        let maxRows = ceil(Float(count) / Float(thumbnailCols))
+        let rows = min(Int(maxRows), thumbnailRows)
+        return thumbnailHeight * CGFloat(rows) + ThumbnailSectionPadding * 2
     }
 
     override init() {
@@ -87,37 +105,32 @@ class TopSitesLayout: UICollectionViewLayout {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func setupForOrientation(orientation: UIInterfaceOrientation) {
+    private func setupForOrientation(orientation: UIInterfaceOrientation) {
         if orientation.isLandscape {
-            numRows = 2
-            numCols = 3
+            thumbnailRows = 2
+            thumbnailCols = 3
         } else {
-            numRows = 3
-            numCols = 2
+            thumbnailRows = 3
+            thumbnailCols = 2
         }
     }
 
     private func getIndexAtPosition(#y: CGFloat) -> Int {
-        let thumbnailSectionHeight: CGFloat = thumbnailWidth * numRows
-
-        if y < thumbnailSectionHeight {
+        if y < topSectionHeight {
             let row = Int(y / thumbnailHeight)
-            return min(count - 1, max(0, row * Int(numCols)))
+            return min(count - 1, max(0, row * thumbnailCols))
         }
-        return min(count - 1, max(0, Int((y - thumbnailSectionHeight) / RowHeight + numRows * numCols)))
+        return min(count - 1, max(0, Int((y - topSectionHeight) / AppConstants.DefaultRowHeight + CGFloat(thumbnailCount))))
     }
 
     override func collectionViewContentSize() -> CGSize {
-        let c = CGFloat(count)
-        let offset: CGFloat = ToolbarHeight + StatusBarHeight + HomePanelButtonContainerHeight
-
-        if c <= numRows * numCols {
-            let row = floor(Double(c / numCols))
-            return CGSize(width: width, height: CGFloat(row) * thumbnailHeight + offset)
+        if count <= thumbnailCount {
+            let row = floor(Double(count / thumbnailCols))
+            return CGSize(width: width, height: topSectionHeight)
         }
 
-        let h = (c - numRows * numCols) * RowHeight
-        return CGSize(width: width, height: numRows * thumbnailHeight + h + offset)
+        let bottomSectionHeight = CGFloat(count - thumbnailCount) * AppConstants.DefaultRowHeight
+        return CGSize(width: width, height: topSectionHeight + bottomSectionHeight)
     }
 
     override func layoutAttributesForElementsInRect(rect: CGRect) -> [AnyObject]? {
@@ -134,7 +147,7 @@ class TopSitesLayout: UICollectionViewLayout {
             let attr = layoutAttributesForItemAtIndexPath(indexPath)
             attrs.append(attr)
 
-            if CGFloat(i) >= (numRows * numCols) - 1 {
+            if i >= thumbnailCount - 1 {
                 let decoration = layoutAttributesForDecorationViewOfKind(SeparatorKind, atIndexPath: indexPath)
                 attrs.append(decoration)
             }
@@ -142,34 +155,32 @@ class TopSitesLayout: UICollectionViewLayout {
         return attrs
     }
 
+    // Set the frames for the row separators.
     override func layoutAttributesForDecorationViewOfKind(elementKind: String, atIndexPath indexPath: NSIndexPath) -> UICollectionViewLayoutAttributes! {
         let decoration = UICollectionViewLayoutAttributes(forDecorationViewOfKind: elementKind, withIndexPath: indexPath)
-
-        let h = ((CGFloat(indexPath.item + 1)) - numRows * numCols) * RowHeight
-        decoration.frame = CGRect(x: 0,
-            y: CGFloat(thumbnailHeight * numRows + h),
-            width: width,
-            height: 1)
+        let rowIndex = indexPath.item - thumbnailCount + 1
+        let rowYOffset = CGFloat(rowIndex) * AppConstants.DefaultRowHeight
+        let y = topSectionHeight + rowYOffset
+        decoration.frame = CGRectMake(0, y, width, 0.5)
         return decoration
     }
 
     override func layoutAttributesForItemAtIndexPath(indexPath: NSIndexPath) -> UICollectionViewLayoutAttributes! {
         let attr = UICollectionViewLayoutAttributes(forCellWithIndexPath: indexPath)
 
-        let i = CGFloat(indexPath.item)
-        if i < numRows * numCols {
-            let row = floor(Double(i / numCols))
-            let col = i % numCols
-            attr.frame = CGRect(x: CGFloat(thumbnailWidth * col),
-                y: CGFloat(row) * thumbnailHeight,
-                width: thumbnailWidth,
-                height: thumbnailHeight)
+        let i = indexPath.item
+        if i < thumbnailCount {
+            // Set the top thumbnail frames.
+            let row = floor(Double(i / thumbnailCols))
+            let col = i % thumbnailCols
+            let x = CGFloat(thumbnailWidth * CGFloat(col)) + ThumbnailSectionPadding
+            let y = CGFloat(row) * thumbnailHeight + ThumbnailSectionPadding
+            attr.frame = CGRectMake(x, y, thumbnailWidth, thumbnailHeight)
         } else {
-            let h = CGFloat(i - numRows * numCols) * RowHeight
-            attr.frame = CGRect(x: 0,
-                y: CGFloat(thumbnailHeight * numRows + h),
-                width: width,
-                height: RowHeight)
+            // Set the bottom row frames.
+            let rowYOffset = CGFloat(i - thumbnailCount) * AppConstants.DefaultRowHeight
+            let y = CGFloat(topSectionHeight + rowYOffset)
+            attr.frame = CGRectMake(0, y, width, AppConstants.DefaultRowHeight)
         }
 
         return attr
@@ -180,15 +191,22 @@ class TopSitesLayout: UICollectionViewLayout {
     }
 }
 
-class TopSitesDataSource: NSObject, UICollectionViewDataSource {
+private class TopSitesDataSource: NSObject, UICollectionViewDataSource {
     var data: Cursor
+    var profile: Profile
 
-    init(data: Cursor) {
+    init(profile: Profile, data: Cursor) {
         self.data = data
+        self.profile = profile
     }
 
     func collectionView(collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return data.count
+    }
+
+    private func setDefaultThumbnailBackground(cell: ThumbnailCell) {
+        cell.imageView.image = UIImage(named: "defaultFavicon")!
+        cell.imageView.contentMode = UIViewContentMode.Center
     }
 
     func collectionView(collectionView: UICollectionView, cellForItemAtIndexPath indexPath: NSIndexPath) -> UICollectionViewCell {
@@ -198,15 +216,23 @@ class TopSitesDataSource: NSObject, UICollectionViewDataSource {
         if indexPath.item < 6 {
             let cell = collectionView.dequeueReusableCellWithReuseIdentifier(ThumbnailIdentifier, forIndexPath: indexPath) as ThumbnailCell
             cell.textLabel.text = site.title.isEmpty ? site.url : site.title
-            cell.imageView.image = UIImage(named: DefaultImage)
-            cell.imageView.contentMode = UIViewContentMode.Center
+            if let thumbs = profile.thumbnails as? SDWebThumbnails {
+                cell.imageView.moz_getImageFromCache(site.url, cache: thumbs.cache, completed: { (img, err, type, url) -> Void in
+                    if img != nil {
+                        return
+                    }
+                    self.setDefaultThumbnailBackground(cell)
+                })
+            } else {
+                setDefaultThumbnailBackground(cell)
+            }
             return cell
         }
 
         // Cells for the remainder of the top sites list.
-        let cell = collectionView.dequeueReusableCellWithReuseIdentifier(RowIdentifier, forIndexPath: indexPath) as TopSitesRow
+        let cell = collectionView.dequeueReusableCellWithReuseIdentifier(RowIdentifier, forIndexPath: indexPath) as TwoLineCollectionViewCell
         cell.textLabel.text = site.title.isEmpty ? site.url : site.title
-        cell.descriptionLabel.text = site.url
+        cell.detailTextLabel.text = site.url
         if let icon = site.icon? {
             cell.imageView.sd_setImageWithURL(NSURL(string: icon.url)!)
         } else {
@@ -227,60 +253,10 @@ private class TopSitesSeparator: UICollectionReusableView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        self.backgroundColor = UIColor.lightGrayColor()
+        self.backgroundColor = SeparatorColor
     }
 
     required init(coder aDecoder: NSCoder) {
         assertionFailure("Not implemented")
-    }
-}
-
-// TODO: This should reuse TwoLineCell somehow. Maybe change TwoLineCell to a generic
-// UIView, then set it as the contentView so it can be used with any cell type.
-private class TopSitesRow: UICollectionViewCell {
-    let textLabel = UILabel()
-    let descriptionLabel = UILabel()
-    let imageView = UIImageView()
-    let margin = 10
-
-    override init() {
-        super.init()
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-
-        contentView.addSubview(textLabel)
-        contentView.addSubview(descriptionLabel)
-        contentView.addSubview(imageView)
-
-        imageView.contentMode = .ScaleAspectFill
-        imageView.image = UIImage(named: "defaultFavicon")
-        imageView.snp_makeConstraints({ make in
-            make.top.left.equalTo(self.contentView).offset(self.margin)
-            make.bottom.equalTo(self.contentView).offset(-self.margin)
-            make.width.equalTo(self.contentView.snp_height).offset(-2*self.margin)
-        })
-
-        textLabel.font = UIFont(name: "FiraSans-SemiBold", size: 13)
-        textLabel.textColor = UIAccessibilityDarkerSystemColorsEnabled() ? UIColor.blackColor() : UIColor.darkGrayColor()
-        textLabel.snp_makeConstraints({ make in
-            make.top.equalTo(self.imageView.snp_top)
-            make.right.equalTo(self.contentView).offset(-self.margin)
-            make.left.equalTo(self.imageView.snp_right).offset(self.margin)
-        })
-
-        descriptionLabel.font = UIFont(name: "FiraSans-SemiBold", size: 13)
-        descriptionLabel.textColor = UIAccessibilityDarkerSystemColorsEnabled() ? UIColor.lightTextColor() : UIColor.lightGrayColor()
-        descriptionLabel.snp_makeConstraints({ make in
-            make.top.equalTo(self.textLabel.snp_bottom)
-            make.right.equalTo(self.contentView).offset(-self.margin)
-            make.left.equalTo(self.imageView.snp_right).offset(self.margin)
-        })
-
-    }
-
-    required init(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
     }
 }

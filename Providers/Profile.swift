@@ -2,71 +2,21 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import Account
 import Foundation
 import Storage
+import Shared
 
-class ProfileFileAccessor : FileAccessor {
-    let profile: Profile
+class ProfileFileAccessor: FileAccessor {
     init(profile: Profile) {
-        self.profile = profile
-    }
-
-    private func createDir(path: String) -> String? {
-        if !NSFileManager.defaultManager().fileExistsAtPath(path) {
-            var err: NSError? = nil
-            if !NSFileManager.defaultManager().createDirectoryAtPath(path, withIntermediateDirectories: false, attributes: nil, error: &err) {
-                println("Error creating profile folder at \(path): \(err?.localizedDescription)")
-                return nil
-            }
-        }
-        return path
-    }
-
-    func getDir(name: String?, basePath: String? = nil) -> String? {
-        var path = basePath
-        if path == nil {
-        	path = NSSearchPathForDirectoriesInDomains(NSSearchPathDirectory.DocumentDirectory, NSSearchPathDomainMask.UserDomainMask, true)[0] as? String
-            path = createDir(path!.stringByAppendingPathComponent(profileDirName))
-
-        }
-
-        if let name = name {
-            path = createDir(path!.stringByAppendingPathComponent(name))
-        }
-        return path!
-    }
-
-    func move(src: String, srcBasePath: String? = nil, dest: String, destBasePath: String? = nil) -> Bool {
-        if let f = self.get(src, basePath: nil) {
-            if let f2 = self.get(dest) {
-                return NSFileManager.defaultManager().moveItemAtPath(f, toPath: f2, error: nil)
-            }
-        }
-
-        return false
-    }
-
-    private var profileDirName: String {
-        return "profile.\(profile.localName())"
-    }
-
-    func get(filename: String, basePath: String? = nil) -> String? {
-        return getDir(nil, basePath: basePath)?.stringByAppendingPathComponent(filename)
-    }
-
-
-    func remove(filename: String, basePath: String? = nil) {
-        let fileManager = NSFileManager.defaultManager()
-        if var file = self.get(filename) {
-            fileManager.removeItemAtPath(file, error: nil)
-        }
-    }
-
-    func exists(filename: String, basePath: String? = nil) -> Bool {
-        if var file = self.get(filename, basePath: basePath) {
-            return NSFileManager.defaultManager().fileExistsAtPath(file)
-        }
-        return false
+        let profileDirName = "profile.\(profile.localName())"
+        let manager = NSFileManager.defaultManager()
+        // Bug 1147262: First option is for device, second is for simulator.
+        let url =
+            manager.containerURLForSecurityApplicationGroupIdentifier(ExtensionUtils.sharedContainerIdentifier()) ??
+            manager .URLsForDirectory(.DocumentDirectory, inDomains: .UserDomainMask)[0] as? NSURL
+        let profilePath = url!.path!.stringByAppendingPathComponent(profileDirName)
+        super.init(rootPath: profilePath)
     }
 }
 
@@ -77,13 +27,15 @@ protocol Profile {
     var bookmarks: protocol<BookmarksModelFactory, ShareToDestination> { get }
     // var favicons: Favicons { get }
     var clients: Clients { get }
-    var prefs: ProfilePrefs { get }
+    var prefs: Prefs { get }
     var searchEngines: SearchEngines { get }
     var files: FileAccessor { get }
     var history: History { get }
     var favicons: Favicons { get }
     var readingList: ReadingList { get }
+    var remoteClientsAndTabs: RemoteClientsAndTabs { get }
     var passwords: Passwords { get }
+    var thumbnails: Thumbnails { get }
 
     // I got really weird EXC_BAD_ACCESS errors on a non-null reference when I made this a getter.
     // Similar to <http://stackoverflow.com/questions/26029317/exc-bad-access-when-indirectly-accessing-inherited-member-in-swift>.
@@ -116,7 +68,7 @@ public class MockProfile: Profile {
         return SearchEngines(prefs: self.prefs)
     } ()
 
-    lazy var prefs: ProfilePrefs = {
+    lazy var prefs: Prefs = {
         return MockProfilePrefs()
     } ()
 
@@ -136,8 +88,16 @@ public class MockProfile: Profile {
         return SQLiteReadingList(files: self.files)
     }()
 
+    lazy var remoteClientsAndTabs: RemoteClientsAndTabs = {
+        return SQLiteRemoteClientsAndTabs(files: self.files)
+    }()
+
     lazy var passwords: Passwords = {
         return MockPasswords(files: self.files)
+    }()
+
+    lazy var thumbnails: Thumbnails = {
+        return SDWebThumbnails(files: self.files)
     }()
 
     let accountConfiguration: FirefoxAccountConfiguration = LatestDevFirefoxAccountConfiguration()
@@ -197,7 +157,7 @@ public class BrowserProfile: Profile {
         return SearchEngines(prefs: self.prefs)
     } ()
 
-    func makePrefs() -> ProfilePrefs {
+    func makePrefs() -> Prefs {
         return NSUserDefaultsProfilePrefs(profile: self)
     }
 
@@ -211,7 +171,7 @@ public class BrowserProfile: Profile {
 
     // lazy var ReadingList readingList
 
-    lazy var prefs: ProfilePrefs = {
+    lazy var prefs: Prefs = {
         return self.makePrefs()
     }()
 
@@ -223,8 +183,16 @@ public class BrowserProfile: Profile {
         return SQLiteReadingList(files: self.files)
     }()
 
+    lazy var remoteClientsAndTabs: RemoteClientsAndTabs = {
+        return MockRemoteClientsAndTabs()
+    }()
+
     lazy var passwords: Passwords = {
         return SQLitePasswords(files: self.files)
+    }()
+
+    lazy var thumbnails: Thumbnails = {
+        return SDWebThumbnails(files: self.files)
     }()
 
     let accountConfiguration: FirefoxAccountConfiguration = LatestDevFirefoxAccountConfiguration()

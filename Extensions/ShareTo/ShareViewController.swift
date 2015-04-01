@@ -16,8 +16,8 @@ let ShareDestinationBookmarks: NSString = "Bookmarks"
 let ShareDestinationReadingList: NSString = "ReadingList"
 
 let ShareDestinations = [
-    ShareDestination(code: ShareDestinationBookmarks, name: NSLocalizedString("Add to Bookmarks",    comment: ""), image: "bookmarkStar"),
-    ShareDestination(code: ShareDestinationReadingList, name: NSLocalizedString("Add to Reading List", comment: ""), image: "readingList")
+    ShareDestination(code: ShareDestinationBookmarks, name: NSLocalizedString("Add to Bookmarks",    comment: "On/off toggle to select adding this url to your bookmarks"), image: "bookmarkStar"),
+    ShareDestination(code: ShareDestinationReadingList, name: NSLocalizedString("Add to Reading List", comment: "On/off toggle to select adding this url to your reading list"), image: "readingList")
 ]
 
 protocol ShareControllerDelegate {
@@ -25,8 +25,7 @@ protocol ShareControllerDelegate {
     func shareController(shareController: ShareDialogController, didShareItem item: ShareItem, toDestinations destinations: NSSet) -> Void
 }
 
-class ShareDialogController: UIViewController, UITableViewDataSource, UITableViewDelegate
-{
+class ShareDialogController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var delegate: ShareControllerDelegate!
     var item: ShareItem!
     var initialShareDestinations: NSSet = NSSet(object: ShareDestinationBookmarks)
@@ -57,11 +56,13 @@ class ShareDialogController: UIViewController, UITableViewDataSource, UITableVie
         
         navItem = UINavigationItem()
         navItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: UIBarButtonSystemItem.Cancel, target: self, action: "cancel")
-        navItem.leftBarButtonItem?.setTitleTextAttributes([NSFontAttributeName: UIFont(name: "FiraSans-Regular", size: 17.0)!], forState: UIControlState.Normal)
+        let leftFontName = UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Medium" : "HelveticaNeue"
+        navItem.leftBarButtonItem?.setTitleTextAttributes([NSFontAttributeName: UIFont(name: leftFontName, size: 17.0)!], forState: UIControlState.Normal)
         
         navItem.rightBarButtonItem = UIBarButtonItem(title: "Add", style: UIBarButtonItemStyle.Done, target: self, action: "add")
-        navItem.rightBarButtonItem?.setTitleTextAttributes([NSFontAttributeName: UIFont(name: "FiraSans-SemiBold", size: 17.0)!], forState: UIControlState.Normal)
-        
+        let rightFontName = UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Bold" : "HelveticaNeue-Medium"
+        navItem.rightBarButtonItem?.setTitleTextAttributes([NSFontAttributeName: UIFont(name: rightFontName, size: 17.0)!], forState: UIControlState.Normal)
+
         let size = 44.0 * 0.7
         let logo = UIImageView(frame: CGRect(x: 0, y: 0, width: size, height: size))
         logo.image = UIImage(named: "flat-logo")
@@ -77,7 +78,7 @@ class ShareDialogController: UIViewController, UITableViewDataSource, UITableVie
         titleView.numberOfLines = 3
         titleView.lineBreakMode = NSLineBreakMode.ByWordWrapping
         titleView.text = item.title
-        titleView.font = UIFont(name: "FiraSans-Medium", size: 12)
+        titleView.font = UIFont(name: UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Bold" : "HelveticaNeue-Medium", size: 12)
         view.addSubview(titleView)
         
         // Setup the link view
@@ -87,7 +88,7 @@ class ShareDialogController: UIViewController, UITableViewDataSource, UITableVie
         linkView.numberOfLines = 3
         linkView.lineBreakMode = NSLineBreakMode.ByWordWrapping
         linkView.text = item.url
-        linkView.font = UIFont(name: "FiraSans-Light", size: 10)
+        linkView.font = UIFont(name: UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Medium" : "HelveticaNeue", size: 10)
         view.addSubview(linkView)
         
         // Setup the icon
@@ -187,7 +188,7 @@ class ShareDialogController: UIViewController, UITableViewDataSource, UITableVie
     func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
         let cell = UITableViewCell()
         cell.textLabel?.textColor = UIAccessibilityDarkerSystemColorsEnabled() ? UIColor.darkGrayColor() : UIColor(red:0.733, green:0.729, blue:0.757, alpha:1.000)
-        cell.textLabel?.font = UIFont(name: "FiraSans-Regular", size: 17)
+        cell.textLabel?.font = UIFont(name: UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Medium" : "HelveticaNeue", size: 17)
         cell.imageView?.transform = CGAffineTransformMakeScale(0.5, 0.5)
         cell.accessoryType = selectedShareDestinations.containsObject(ShareDestinations[indexPath.row].code) ? UITableViewCellAccessoryType.Checkmark : UITableViewCellAccessoryType.None
         cell.tintColor = UIColor(red:0.427, green:0.800, blue:0.102, alpha:1.0)

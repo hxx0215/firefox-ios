@@ -5,6 +5,14 @@
 import UIKit
 import Storage
 
+struct SiteTableViewControllerUX {
+    static let HeaderHeight = CGFloat(25)
+    static let RowHeight = CGFloat(58)
+    static let HeaderBorderColor = UIColor(rgb: 0xCFD5D9).colorWithAlphaComponent(0.8)
+    static let HeaderTextColor = UIColor(rgb: 0x565656)
+    static let HeaderBackgroundColor = UIColor(rgb: 0xECF0F3).colorWithAlphaComponent(0.7)
+}
+
 private class SiteTableViewHeader : UITableViewHeaderFooterView {
     // I can't get drawRect to play nicely with the glass background. As a fallback
     // we just use views for the top and bottom borders.
@@ -24,7 +32,6 @@ private class SiteTableViewHeader : UITableViewHeaderFooterView {
     }
 
     private func didLoad() {
-        println("Did load \(self)")
         addSubview(topBorder)
         addSubview(bottomBorder)
         backgroundView = UIVisualEffectView(effect: UIBlurEffect(style: .Light))
@@ -35,16 +42,16 @@ private class SiteTableViewHeader : UITableViewHeaderFooterView {
     }
 
     override func layoutSubviews() {
-        topBorder.frame = CGRect(x: 0, y: 0, width: frame.width, height: 1)
-        bottomBorder.frame = CGRect(x: 0, y: frame.height - 1, width: frame.width, height: 1)
-        topBorder.backgroundColor = UIColor.lightGrayColor()
-        bottomBorder.backgroundColor = UIColor.lightGrayColor()
+        topBorder.frame = CGRect(x: 0, y: -0.5, width: frame.width, height: 0.5)
+        bottomBorder.frame = CGRect(x: 0, y: frame.height, width: frame.width, height: 0.5)
+        topBorder.backgroundColor = SiteTableViewControllerUX.HeaderBorderColor
+        bottomBorder.backgroundColor = SiteTableViewControllerUX.HeaderBorderColor
         super.layoutSubviews()
 
-        textLabel.font = UIFont(name: "FiraSans-SemiBold", size: 13)
-        textLabel.textColor = UIAccessibilityDarkerSystemColorsEnabled() ? UIColor.blackColor() : UIColor.darkTextColor()
+        textLabel.font = UIFont(name: UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Bold" : "HelveticaNeue-Medium", size: 11)
+        textLabel.textColor = UIAccessibilityDarkerSystemColorsEnabled() ? UIColor.blackColor() : SiteTableViewControllerUX.HeaderTextColor
         textLabel.textAlignment = .Center
-        contentView.backgroundColor = UIColor(red: 0, green: 0, blue: 0, alpha: 0.05)
+        contentView.backgroundColor = SiteTableViewControllerUX.HeaderBackgroundColor
     }
 }
 
@@ -73,7 +80,7 @@ class SiteTableViewController: UIViewController, UITableViewDelegate, UITableVie
 
         tableView.delegate = self
         tableView.dataSource = self
-        tableView.registerClass(TwoLineCell.self, forCellReuseIdentifier: CellIdentifier)
+        tableView.registerClass(TwoLineTableViewCell.self, forCellReuseIdentifier: CellIdentifier)
         tableView.registerClass(SiteTableViewHeader.self, forHeaderFooterViewReuseIdentifier: HeaderIdentifier)
         tableView.layoutMargins = UIEdgeInsetsZero
         tableView.keyboardDismissMode = UIScrollViewKeyboardDismissMode.OnDrag
@@ -102,6 +109,10 @@ class SiteTableViewController: UIViewController, UITableViewDelegate, UITableVie
     }
 
     func tableView(tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        return 25
+        return SiteTableViewControllerUX.HeaderHeight
+    }
+
+    func tableView(tableView: UITableView, heightForRowAtIndexPath indexPath: NSIndexPath) -> CGFloat {
+        return SiteTableViewControllerUX.RowHeight
     }
 }

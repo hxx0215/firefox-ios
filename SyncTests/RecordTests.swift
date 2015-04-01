@@ -4,8 +4,9 @@
 
 import UIKit
 import XCTest
-import Client
+import Shared
 import Storage
+import Sync
 
 class RecordTests: XCTestCase {
     func testGUIDs() {
@@ -43,7 +44,12 @@ class RecordTests: XCTestCase {
             return ClientPayload(s)
         }
 
-        let ciphertextClientsFactory: (String) -> ClientPayload? = Keys(defaultBundle: KeyBundle.random()).factory("clients")
+        let f: (JSON) -> ClientPayload = {
+            j in
+            return ClientPayload(j)
+        }
+
+        let ciphertextClientsFactory: (String) -> ClientPayload? = Keys(defaultBundle: KeyBundle.random()).factory("clients", f)
 
         let clearFactory: (String) -> CleartextPayloadJSON? = {
             (s: String) -> CleartextPayloadJSON? in
@@ -71,7 +77,12 @@ class RecordTests: XCTestCase {
 
         let inputString = "{\"sortindex\": 131, \"payload\": \"{\\\"ciphertext\\\":\\\"YJB4dr0vZEIWPirfU2FCJvfzeSLiOP5QWasol2R6ILUxdHsJWuUuvTZVhxYQfTVNou6hVV67jfAvi5Cs+bqhhQsv7icZTiZhPTiTdVGt+uuMotxauVA5OryNGVEZgCCTvT3upzhDFdDbJzVd9O3/gU/b7r/CmAHykX8bTlthlbWeZ8oz6gwHJB5tPRU15nM/m/qW1vyKIw5pw/ZwtAy630AieRehGIGDk+33PWqsfyuT4EUFY9/Ly+8JlnqzxfiBCunIfuXGdLuqTjJOxgrK8mI4wccRFEdFEnmHvh5x7fjl1ID52qumFNQl8zkB75C8XK25alXqwvRR6/AQSP+BgQ==\\\",\\\"IV\\\":\\\"v/0BFgicqYQsd70T39rraA==\\\",\\\"hmac\\\":\\\"59605ed696f6e0e6e062a03510cff742bf6b50d695c042e8372a93f4c2d37dac\\\"}\", \"id\": \"0-P9fabp9vJD\", \"modified\": 1326254123.65}"
 
-        let ciphertextClientsFactory: (String) -> CleartextPayloadJSON? = KeyBundle(encKeyB64: b64E, hmacKeyB64: b64H).factory()
+        let f: (JSON) -> CleartextPayloadJSON = {
+            j in
+            return CleartextPayloadJSON(j)
+        }
+
+        let ciphertextClientsFactory: (String) -> CleartextPayloadJSON? = KeyBundle(encKeyB64: b64E, hmacKeyB64: b64H).factory(f)
         println(b64E)
         println(b64H)
         if let r = Record<CleartextPayloadJSON>.fromEnvelope(EnvelopeJSON(inputString), payloadFactory: ciphertextClientsFactory) {
@@ -80,6 +91,41 @@ class RecordTests: XCTestCase {
             XCTAssertEqual(r.sortindex, expectedSortIndex)
         } else {
             XCTFail("No record.")
+        }
+    }
+
+    func testMeta() {
+        let fullRecord = "{\"id\":\"global\"," +
+            "\"payload\":" +
+            "\"{\\\"syncID\\\":\\\"zPSQTm7WBVWB\\\"," +
+            "\\\"declined\\\":[\\\"bookmarks\\\"]," +
+            "\\\"storageVersion\\\":5," +
+            "\\\"engines\\\":{" +
+            "\\\"clients\\\":{\\\"version\\\":1,\\\"syncID\\\":\\\"fDg0MS5bDtV7\\\"}," +
+            "\\\"forms\\\":{\\\"version\\\":1,\\\"syncID\\\":\\\"GXF29AFprnvc\\\"}," +
+            "\\\"history\\\":{\\\"version\\\":1,\\\"syncID\\\":\\\"av75g4vm-_rp\\\"}," +
+            "\\\"passwords\\\":{\\\"version\\\":1,\\\"syncID\\\":\\\"LT_ACGpuKZ6a\\\"}," +
+            "\\\"prefs\\\":{\\\"version\\\":2,\\\"syncID\\\":\\\"-3nsksP9wSAs\\\"}," +
+            "\\\"tabs\\\":{\\\"version\\\":1,\\\"syncID\\\":\\\"W4H5lOMChkYA\\\"}}}\"," +
+            "\"username\":\"5817483\"," +
+            "\"modified\":1.32046073744E9}"
+
+        let record = GlobalEnvelope(fullRecord)
+        XCTAssertTrue(record.isValid())
+
+        let global = MetaGlobal.fromPayload(JSON.parse(record.payload))
+        XCTAssertTrue(global != nil)
+
+        if let global = global {
+            XCTAssertTrue(global.declined != nil)
+            XCTAssertTrue(global.engines != nil)
+            XCTAssertEqual(["bookmarks"], global.declined!)
+            XCTAssertEqual(5, global.storageVersion)
+            let modified = record.modified
+            XCTAssertTrue(1320460737440 == modified)
+            let forms = global.engines!["forms"]
+            let syncID = forms!.syncID
+            XCTAssertEqual("GXF29AFprnvc", syncID)
         }
     }
 }

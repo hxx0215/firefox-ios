@@ -3,22 +3,23 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import UIKit
+import Shared
 import Storage
 
 private let SuggestionBackgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.95, alpha: 1)
 private let SuggestionBorderColor = UIColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1)
 private let SuggestionBorderWidth: CGFloat = 0.5
 private let SuggestionCornerRadius: CGFloat = 2
-private let SuggestionFont = UIFont(name: "FiraSans-Regular", size: 12)
+private let SuggestionFont = UIFont(name: UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Medium" : "HelveticaNeue", size: 12)
 private let SuggestionInsets = UIEdgeInsetsMake(5, 5, 5, 5)
 private let SuggestionMargin: CGFloat = 4
 private let SuggestionCellVerticalPadding: CGFloat = 8
 private let SuggestionCellMaxRows = 2
 
 private let PromptColor = UIColor(rgb: 0xeef0f3)
-private let PromptFont = UIFont(name: "FiraSans-Regular", size: 12)
-private let PromptYesFont = UIFont(name: "FiraSans-Bold", size: 15)
-private let PromptNoFont = UIFont(name: "FiraSans-Regular", size: 15)
+private let PromptFont = UIFont(name: UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Medium" : "HelveticaNeue", size: 12)
+private let PromptYesFont = UIFont(name: "HelveticaNeue-Bold", size: 15)
+private let PromptNoFont = UIFont(name: UIAccessibilityIsBoldTextEnabled() ? "HelveticaNeue-Medium" : "HelveticaNeue", size: 15)
 private let PromptInsets = UIEdgeInsetsMake(15, 12, 15, 12)
 private let PromptButtonColor = UIColor(rgb: 0x007aff)
 
@@ -363,8 +364,7 @@ extension SearchViewController: UITableViewDataSource {
         case .BookmarksAndHistory:
             let cell = super.tableView(tableView, cellForRowAtIndexPath: indexPath)
             if let site = data[indexPath.row] as? Site {
-                cell.textLabel?.text = site.title
-                cell.detailTextLabel?.text = site.url
+                (cell as TwoLineTableViewCell).setLines(site.title, detailText: site.url)
                 if let img = site.icon? {
                     let imgUrl = NSURL(string: img.url)
                     cell.imageView?.sd_setImageWithURL(imgUrl, placeholderImage: self.profile.favicons.defaultIcon)
@@ -408,7 +408,7 @@ extension SearchViewController: UITableViewDataSource {
         }
     }
 
-    func tableView(tableView: UITableView, heightForRowAtIndexPath indexPath: NSIndexPath) -> CGFloat {
+    override func tableView(tableView: UITableView, heightForRowAtIndexPath indexPath: NSIndexPath) -> CGFloat {
         if let currentSection = SearchListSection(rawValue: indexPath.section) {
             switch currentSection {
             case .SearchSuggestions:
@@ -417,7 +417,7 @@ extension SearchViewController: UITableViewDataSource {
                 suggestionCell.layoutIfNeeded()
                 return suggestionCell.frame.height
             default:
-                return tableView.rowHeight
+                return super.tableView(tableView, heightForRowAtIndexPath: indexPath)
             }
         }
 
@@ -455,7 +455,7 @@ private protocol SuggestionCellDelegate: class {
 /**
  * Cell that wraps a list of search suggestion buttons.
  */
-private class SuggestionCell: TwoLineCell {
+private class SuggestionCell: UITableViewCell {
     weak var delegate: SuggestionCellDelegate?
     let container = UIView()
 
@@ -509,7 +509,7 @@ private class SuggestionCell: TwoLineCell {
         super.layoutSubviews()
 
         // The left bounds of the suggestions align with where text would be displayed.
-        let textLeft = textLabel!.frame.origin.x
+        let textLeft: CGFloat = 44
 
         // The maximum width of the container, after which suggestions will wrap to the next line.
         let maxWidth = contentView.frame.width
@@ -536,7 +536,9 @@ private class SuggestionCell: TwoLineCell {
                 if currentLeft > textLeft {
                     currentRow++
                     if currentRow >= SuggestionCellMaxRows {
-                        break
+                        // Don't draw this button if it doesn't fit on the row.
+                        button.frame = CGRectZero
+                        continue
                     }
 
                     currentLeft = textLeft
@@ -558,6 +560,9 @@ private class SuggestionCell: TwoLineCell {
         frame.size.height = height + 2 * SuggestionCellVerticalPadding
         contentView.frame = frame
         container.frame = frame
+
+        let imageY = (frame.size.height - 24) / 2
+        imageView!.frame = CGRectMake(10, imageY, 24, 24)
     }
 }
 
