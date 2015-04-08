@@ -19,7 +19,7 @@ class LiveStorageClientTests : LiveAccountTest {
         let endpoint = token.api_endpoint
         XCTAssertTrue(endpoint.rangeOfString("services.mozilla.com") != nil, "We got a Sync server.")
 
-        let cryptoURI = NSURL(string: endpoint + "/storage/")
+        let cryptoURI = NSURL(string: endpoint)
         let authorizer: Authorizer = {
             (r: NSMutableURLRequest) -> NSMutableURLRequest in
             let helper = HawkHelper(id: token.id, key: token.key.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false)!)
@@ -115,7 +115,7 @@ class LiveStorageClientTests : LiveAccountTest {
             if let ready = result.successValue {
                 XCTAssertTrue(ready.collectionKeys.defaultBundle.encKey.length == 32)
                 XCTAssertTrue(ready.scratchpad.global != nil)
-                if let clients = ready.scratchpad.global?.engines?["clients"] {
+                if let clients = ready.scratchpad.global?.value.engines?["clients"] {
                     XCTAssertTrue(countElements(clients.syncID) == 12)
                 }
             }

@@ -21,7 +21,7 @@
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>6</string>
+	<string>7</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
@@ -34,6 +34,7 @@
 		<string>CharisSILR.ttf</string>
 		<string>FiraSans-Bold.ttf</string>
 		<string>FiraSans-BoldItalic.ttf</string>
+		<string>FiraSans-Book.ttf</string>
 		<string>FiraSans-Italic.ttf</string>
 		<string>FiraSans-Light.ttf</string>
 		<string>FiraSans-Medium.ttf</string>
@@ -54,6 +55,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
