@@ -54,9 +54,10 @@ class FxALoginStateMachine {
         let doghouse: Deferred<FxAState> = Deferred(value: DoghouseState())
         let same: Deferred<FxAState> = Deferred(value: state)
 
+        log.info("Advancing from state: \(state.label.rawValue)")
         switch state.label {
         case .Married:
-            let state = state as MarriedState
+            let state = state as! MarriedState
             log.debug("Checking key pair freshness.")
             if state.isKeyPairExpired(now) {
                 log.info("Key pair has expired; transitioning to CohabitingBeforeKeyPair.")
@@ -71,7 +72,7 @@ class FxALoginStateMachine {
             return same
 
         case .CohabitingBeforeKeyPair:
-            let state = state as CohabitingBeforeKeyPairState
+            let state = state as! CohabitingBeforeKeyPairState
             log.debug("Generating key pair.")
             return self.client.keyPair().bind { result in
                 if let keyPair = result.successValue {
@@ -87,7 +88,7 @@ class FxALoginStateMachine {
             }
 
         case .CohabitingAfterKeyPair:
-            let state = state as CohabitingAfterKeyPairState
+            let state = state as! CohabitingAfterKeyPairState
             log.debug("Signing public key.")
             return client.sign(state.sessionToken, publicKey: state.keyPair.publicKey).bind { result in
                 if let response = result.successValue {
@@ -124,7 +125,7 @@ class FxALoginStateMachine {
             }
 
         case .EngagedBeforeVerified, .EngagedAfterVerified:
-            let state = state as ReadyForKeys
+            let state = state as! ReadyForKeys
             log.debug("Fetching keys.")
             return client.keys(state.keyFetchToken).bind { result in
                 if let response = result.successValue {

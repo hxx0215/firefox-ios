@@ -2,10 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import Account
 import Foundation
-import Storage
+import Account
+import ReadingList
 import Shared
+import Storage
+import Sync
+
+public class NoAccountError: SyncError {
+    public var description: String {
+        return "No account configured."
+    }
+}
 
 class ProfileFileAccessor: FileAccessor {
     init(profile: Profile) {
@@ -26,14 +34,12 @@ class ProfileFileAccessor: FileAccessor {
 protocol Profile {
     var bookmarks: protocol<BookmarksModelFactory, ShareToDestination> { get }
     // var favicons: Favicons { get }
-    var clients: Clients { get }
     var prefs: Prefs { get }
     var searchEngines: SearchEngines { get }
     var files: FileAccessor { get }
     var history: History { get }
     var favicons: Favicons { get }
-    var readingList: ReadingList { get }
-    var remoteClientsAndTabs: RemoteClientsAndTabs { get }
+    var readingList: ReadingListService? { get }
     var passwords: Passwords { get }
     var thumbnails: Thumbnails { get }
 
@@ -46,70 +52,9 @@ protocol Profile {
 
     func getAccount() -> FirefoxAccount?
     func setAccount(account: FirefoxAccount?)
-}
 
-public class MockProfile: Profile {
-    private let name: String = "mockaccount"
-
-    func localName() -> String {
-        return name
-    }
-
-    lazy var bookmarks: protocol<BookmarksModelFactory, ShareToDestination> = {
-        // Eventually this will be a SyncingBookmarksModel or an OfflineBookmarksModel, perhaps.
-        return BookmarksSqliteFactory(files: self.files)
-    } ()
-
-    lazy var clients: Clients = {
-        return MockClients(files: self.files)
-    } ()
-
-    lazy var searchEngines: SearchEngines = {
-        return SearchEngines(prefs: self.prefs)
-    } ()
-
-    lazy var prefs: Prefs = {
-        return MockProfilePrefs()
-    } ()
-
-    lazy var files: FileAccessor = {
-        return ProfileFileAccessor(profile: self)
-    } ()
-
-    lazy var favicons: Favicons = {
-        return SQLiteFavicons(files: self.files)
-    }()
-
-    lazy var history: History = {
-        return SQLiteHistory(files: self.files)
-    }()
-
-    lazy var readingList: ReadingList = {
-        return SQLiteReadingList(files: self.files)
-    }()
-
-    lazy var remoteClientsAndTabs: RemoteClientsAndTabs = {
-        return SQLiteRemoteClientsAndTabs(files: self.files)
-    }()
-
-    lazy var passwords: Passwords = {
-        return MockPasswords(files: self.files)
-    }()
-
-    lazy var thumbnails: Thumbnails = {
-        return SDWebThumbnails(files: self.files)
-    }()
-
-    let accountConfiguration: FirefoxAccountConfiguration = LatestDevFirefoxAccountConfiguration()
-    var account: FirefoxAccount? = nil
-
-    func getAccount() -> FirefoxAccount? {
-        return account
-    }
-
-    func setAccount(account: FirefoxAccount?) {
-        self.account = account
-    }
+    func getClients() -> Deferred<Result<[RemoteClient]>>
+    func getClientsAndTabs() -> Deferred<Result<[ClientAndTabs]>>
 }
 
 public class BrowserProfile: Profile {
@@ -128,7 +73,7 @@ public class BrowserProfile: Profile {
         if let url = notification.userInfo!["url"] as? NSURL {
             var site: Site!
             if let title = notification.userInfo!["title"] as? NSString {
-                site = Site(url: url.absoluteString!, title: title)
+                site = Site(url: url.absoluteString!, title: title as String)
                 let visit = Visit(site: site, date: NSDate())
                 history.addVisit(visit, complete: { (success) -> Void in
                     // nothing to do
@@ -161,10 +106,6 @@ public class BrowserProfile: Profile {
         return NSUserDefaultsProfilePrefs(profile: self)
     }
 
-    lazy var clients: Clients = {
-        return MockClients(files: self.files)
-    } ()
-
     lazy var favicons: Favicons = {
         return SQLiteFavicons(files: self.files)
     }()
@@ -179,13 +120,70 @@ public class BrowserProfile: Profile {
         return SQLiteHistory(files: self.files)
     }()
 
-    lazy var readingList: ReadingList = {
-        return SQLiteReadingList(files: self.files)
+    lazy var readingList: ReadingListService? = {
+        return ReadingListService(profileStoragePath: self.files.rootPath)
     }()
 
-    lazy var remoteClientsAndTabs: RemoteClientsAndTabs = {
-        return MockRemoteClientsAndTabs()
+    private lazy var remoteClientsAndTabs: RemoteClientsAndTabs = {
+        return SQLiteRemoteClientsAndTabs(files: self.files)
     }()
+
+    private class func syncClientsToStorage(storage: RemoteClientsAndTabs, prefs: Prefs, ready: Ready) -> Deferred<Result<Ready>> {
+        let clientSynchronizer = ready.synchronizer(ClientsSynchronizer.self, prefs: prefs)
+        let success = clientSynchronizer.synchronizeLocalClients(storage, withServer: ready.client, info: ready.info)
+        return success >>== always(ready)
+    }
+
+    public func getClients() -> Deferred<Result<[RemoteClient]>> {
+        if let account = self.account {
+            // TODO: get from the account itself.
+            let url = ProductionSync15Configuration().tokenServerEndpointURL
+            let authState = account.syncAuthState(url)
+
+            let syncPrefs = self.prefs.branch("sync")
+            let storage = self.remoteClientsAndTabs
+
+            let ready = SyncStateMachine.toReady(authState, prefs: syncPrefs)
+
+            let syncClients = curry(BrowserProfile.syncClientsToStorage)(storage, syncPrefs)
+
+            return ready
+              >>== syncClients
+               >>> { return storage.getClients() }
+        }
+
+        return deferResult(NoAccountError())
+    }
+
+    public func getClientsAndTabs() -> Deferred<Result<[ClientAndTabs]>> {
+
+        func syncTabsToStorage(storage: RemoteClientsAndTabs, prefs: Prefs, ready: Ready) -> Deferred<Result<RemoteClientsAndTabs>> {
+            let tabSynchronizer = ready.synchronizer(TabsSynchronizer.self, prefs: prefs)
+            let success = tabSynchronizer.synchronizeLocalTabs(storage, withServer: ready.client, info: ready.info)
+            return success >>== always(storage)
+        }
+
+        if let account = self.account {
+            // TODO: get from the account itself.
+            let url = ProductionSync15Configuration().tokenServerEndpointURL
+            let authState = account.syncAuthState(url)
+
+            let syncPrefs = self.prefs.branch("sync")
+            let storage = self.remoteClientsAndTabs
+
+            let ready = SyncStateMachine.toReady(authState, prefs: syncPrefs)
+
+            let syncClients = curry(BrowserProfile.syncClientsToStorage)(storage, syncPrefs)
+            let syncTabs = curry(syncTabsToStorage)(storage, syncPrefs)
+
+            return ready
+              >>== syncClients
+              >>== syncTabs
+               >>> { return storage.getClientsAndTabs() }
+        }
+
+        return deferResult(NoAccountError())
+    }
 
     lazy var passwords: Passwords = {
         return SQLitePasswords(files: self.files)
@@ -195,10 +193,10 @@ public class BrowserProfile: Profile {
         return SDWebThumbnails(files: self.files)
     }()
 
-    let accountConfiguration: FirefoxAccountConfiguration = LatestDevFirefoxAccountConfiguration()
+    let accountConfiguration: FirefoxAccountConfiguration = ProductionFirefoxAccountConfiguration()
 
     private lazy var account: FirefoxAccount? = {
-        if let dictionary = KeychainWrapper.objectForKey(self.name + ".account") as? [String:AnyObject] {
+        if let dictionary = KeychainWrapper.objectForKey(self.name + ".account") as? [String: AnyObject] {
             return FirefoxAccount.fromDictionary(dictionary)
         }
         return nil

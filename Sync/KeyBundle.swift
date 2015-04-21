@@ -48,7 +48,7 @@ public class KeyBundle: Equatable {
         let hmacAlgorithm = CCHmacAlgorithm(kCCHmacAlgSHA256)
         let digestLen: Int = Int(CC_SHA256_DIGEST_LENGTH)
         let result = UnsafeMutablePointer<CUnsignedChar>.alloc(digestLen)
-        CCHmac(hmacAlgorithm, hmacKey.bytes, UInt(hmacKey.length), ciphertext.bytes, UInt(ciphertext.length), result)
+        CCHmac(hmacAlgorithm, hmacKey.bytes, hmacKey.length, ciphertext.bytes, ciphertext.length, result)
         return (result, digestLen)
     }
 
@@ -97,7 +97,7 @@ public class KeyBundle: Equatable {
             let d = NSData(bytesNoCopy: b, length: Int(copied))
             let s = NSString(data: d, encoding: NSUTF8StringEncoding)
             b.destroy()
-            return s
+            return s as String?
         }
 
         b.destroy()
@@ -105,22 +105,22 @@ public class KeyBundle: Equatable {
     }
 
 
-    private func crypt(input: NSData, iv: NSData, op: CCOperation) -> (status: CCCryptorStatus, buffer: UnsafeMutablePointer<CUnsignedChar>, count: UInt) {
+    private func crypt(input: NSData, iv: NSData, op: CCOperation) -> (status: CCCryptorStatus, buffer: UnsafeMutablePointer<Void>, count: Int) {
         let resultSize = input.length + kCCBlockSizeAES128
-        let result = UnsafeMutablePointer<CUnsignedChar>.alloc(resultSize)
-        var copied: UInt = 0
+        let result = UnsafeMutablePointer<Void>.alloc(resultSize)
+        var copied: Int = 0
 
         let success: CCCryptorStatus =
         CCCrypt(op,
                 CCHmacAlgorithm(kCCAlgorithmAES128),
                 CCOptions(kCCOptionPKCS7Padding),
                 encKey.bytes,
-                UInt(kCCKeySizeAES256),
+                kCCKeySizeAES256,
                 iv.bytes,
                 input.bytes,
-                UInt(input.length),
+                input.length,
                 result,
-                UInt(resultSize),
+                resultSize,
                 &copied
         );
 
@@ -161,6 +161,10 @@ public class KeyBundle: Equatable {
             return f(cleartext!)
         }
     }
+
+    public func asPair() -> [String] {
+        return [self.encKey.base64EncodedString, self.hmacKey.base64EncodedString]
+    }
 }
 
 public func == (lhs: KeyBundle, rhs: KeyBundle) -> Bool {
@@ -168,7 +172,7 @@ public func == (lhs: KeyBundle, rhs: KeyBundle) -> Bool {
            lhs.hmacKey.isEqualToData(rhs.hmacKey)
 }
 
-public class Keys {
+public class Keys: Equatable {
     let valid: Bool
     let defaultBundle: KeyBundle
     var collectionKeys: [String: KeyBundle] = [String: KeyBundle]()
@@ -180,14 +184,14 @@ public class Keys {
 
     public init(payload: KeysPayload?) {
         if let payload = payload {
-        if payload.isValid() {
-            if let keys = payload.defaultKeys {
-                self.defaultBundle = keys
-                self.valid = true
-                return
+            if payload.isValid() {
+                if let keys = payload.defaultKeys {
+                    self.defaultBundle = keys
+                    self.valid = true
+                    return
+                }
+                self.collectionKeys = payload.collectionKeys
             }
-            // TODO: collection keys.
-        }
         }
         self.defaultBundle = KeyBundle.invalid
         self.valid = false
@@ -210,4 +214,19 @@ public class Keys {
         let bundle = forCollection(collection)
         return bundle.factory(f)
     }
+
+    public func asPayload() -> KeysPayload {
+        let json: JSON = JSON([
+            "collection": "crypto",
+            "default": self.defaultBundle.asPair(),
+            "collections": mapValues(self.collectionKeys, { $0.asPair() })
+        ])
+        return KeysPayload(json)
+    }
+}
+
+public func ==(lhs: Keys, rhs: Keys) -> Bool {
+    return lhs.valid == rhs.valid &&
+           lhs.defaultBundle == rhs.defaultBundle &&
+           lhs.collectionKeys == rhs.collectionKeys
 }

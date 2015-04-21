@@ -29,13 +29,13 @@ class LiveStorageClientTests : LiveAccountTest {
 
         let keyBundle: KeyBundle = KeyBundle.fromKB(kB)
         let f: (JSON) -> KeysPayload = { return KeysPayload($0) }
-        let keysFactory: (String) -> KeysPayload? = Keys(defaultBundle: keyBundle).factory("crypto", f)
+        let keysFactory: (String) -> KeysPayload? = Keys(defaultBundle: keyBundle).factory("crypto", f: f)
 
         let workQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)
         let resultQueue = dispatch_get_main_queue()
 
         let storageClient = Sync15StorageClient(serverURI: cryptoURI!, authorizer: authorizer, workQueue: workQueue, resultQueue: resultQueue)
-        let keysFetcher = storageClient.collectionClient("crypto", factory: keysFactory)
+        let keysFetcher = storageClient.clientForCollection("crypto", factory: keysFactory)
 
         return keysFetcher.get("keys").map({
             // Unwrap the response.
@@ -109,14 +109,14 @@ class LiveStorageClientTests : LiveAccountTest {
         let expectation = expectationWithDescription("Waiting on value.")
         let authState = self.getAuthState(NSDate.now())
 
-        let d = chainDeferred(authState, SyncStateMachine.toReady)
+        let d = chainDeferred(authState, { SyncStateMachine.toReady($0, prefs: MockProfilePrefs()) })
 
         d.upon { result in
             if let ready = result.successValue {
                 XCTAssertTrue(ready.collectionKeys.defaultBundle.encKey.length == 32)
                 XCTAssertTrue(ready.scratchpad.global != nil)
                 if let clients = ready.scratchpad.global?.value.engines?["clients"] {
-                    XCTAssertTrue(countElements(clients.syncID) == 12)
+                    XCTAssertTrue(count(clients.syncID) == 12)
                 }
             }
             XCTAssertTrue(result.isSuccess)
